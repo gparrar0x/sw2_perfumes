@@ -1,0 +1,10 @@
+{
+  "tasa_usd_ves": 201.22,
+  "flete_porcentaje": 10,
+  "margen_mayorista": 4,
+  "margen_minorista": 5,
+  "stock_minimo": 5,
+  "iva_porcentaje": 0,
+  "redondeo_decimales": 2,
+  "descripcion": "Configuración de precios y márgenes para SW4 Perfumes"
+}

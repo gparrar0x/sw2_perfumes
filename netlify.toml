@@ -1,0 +1,35 @@
+[build]
+  # Directorio de publicación
+  publish = "."
+
+  # Comando de build (no necesario para sitio estático)
+  command = "echo 'Static site with Netlify Functions'"
+
+[functions]
+  # Directorio de las funciones
+  directory = "netlify/functions"
+
+[dev]
+  # Configuración para netlify dev
+  functions = "netlify/functions"
+  publish = "."
+
+# Configurar headers para CORS
+[[headers]]
+  for = "/.netlify/functions/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+
+# Variables de entorno requeridas:
+MP_ACCESS_TOKEN = "APP_USR-8914557540898820-071614-92868145b3136b11e4d0afbd3066fae1-312104174"
+# GOOGLE_SHEET_ID = "TU_GOOGLE_SHEET_ID"
+# GOOGLE_API_KEY = "TU_GOOGLE_SHEETS_API_KEY"
+# (se configuran en Netlify Dashboard → Site settings → Environment variables)
+
+# Para configurar:
+# 1. Ve a tu panel de Netlify
+# 2. Site settings → Environment variables
+# 3. Agrega: MP_ACCESS_TOKEN con tu Access Token de MercadoPago
+# 4. IMPORTANTE: Usa credenciales de TEST primero para probar

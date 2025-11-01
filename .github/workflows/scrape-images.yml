@@ -1,0 +1,21 @@
+name: Scrape Product Images
+
+on:
+  schedule:
+    - cron: '30 6 * * *'  # Diario a las 6:30am UTC (30min después del sync)
+  workflow_dispatch:      # Manual trigger también
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Netlify Function
+        run: |
+          curl -X GET "${{ secrets.NETLIFY_SITE_URL }}/.netlify/functions/scrape-images?limit=20" \
+               -H "Content-Type: application/json" \
+               -w "HTTP Status: %{http_code}\n"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "⚠️  Image scraping failed! Check logs for details"

@@ -1,0 +1,21 @@
+name: Sync Supplier Catalog
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Diario a las 6am UTC (3am Argentina)
+  workflow_dispatch:     # Manual trigger también
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Netlify Function
+        run: |
+          curl -X POST "${{ secrets.NETLIFY_SITE_URL }}/.netlify/functions/sync-supplier" \
+               -H "Content-Type: application/json" \
+               -w "HTTP Status: %{http_code}\n"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "⚠️  Sync failed! Check logs for details"
