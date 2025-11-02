@@ -4,7 +4,7 @@
 **Sistema Automatizado de Inventario, Sincronización y Ventas Online de Perfumes**
 
 ## 2. Descripción general
-Sistema completo para gestión automatizada de inventario de perfumes con sincronización diaria desde el proveedor (Alberto Cortés), scraping de imágenes, catálogo online con filtros avanzados, gestión de stock en tiempo real y procesamiento de pagos con MercadoPago. El sistema opera con costo de infraestructura de $0/mes usando Netlify Functions, Google Sheets y GitHub Actions para automatización completa del flujo desde proveedor hasta cliente final.
+Sistema completo para gestión automatizada de inventario de perfumes con sincronización diaria desde el proveedor (Alberto Cortés), scraping de imágenes, catálogo online con filtros avanzados, gestión de stock en tiempo real, procesamiento de pagos con MercadoPago, y **bot de WhatsApp con IA para consolidación automática de pedidos**. El sistema opera con costo de infraestructura de $0/mes usando Vercel Serverless Functions, Google Sheets, GitHub Actions y n8n para automatización completa del flujo desde proveedor hasta cliente final, incluyendo gestión inteligente de pedidos conversacionales.
 
 ## 3. Objetivos del proyecto
 
@@ -14,6 +14,9 @@ Sistema completo para gestión automatizada de inventario de perfumes con sincro
 - Ofrecer catálogo online con precios mayorista (4%) y minorista (5%)
 - Procesar pagos en bolóvares venezolanos con MercadoPago
 - Automatizar descuento de stock al vender
+- **Reducir de 2 horas a 5 minutos el procesamiento de pedidos vía WhatsApp**
+- **Consolidar automáticamente pedidos dispersos en conversaciones de WhatsApp**
+- **Distinguir consultas de pedidos reales y generar resúmenes ejecutables**
 - Operar con infraestructura de $0/mes
 
 ### Criterios de óxito
@@ -23,10 +26,48 @@ Sistema completo para gestión automatizada de inventario de perfumes con sincro
 - Procesamiento de ventas con descuento automótico de stock
 - catálogo online con filtros por marca, categoróa y bósqueda
 - Flete del 10% calculado automóticamente en checkout
+- **Bot WhatsApp con >90% de precisión en detección de pedidos vs consultas**
+- **Resumen de pedido generado en <30 segundos desde última interacción**
+- **Reducción de tiempo de procesamiento manual de 2h a <5min por pedido**
 
 ## 4. Requisitos especóficos
 
 ### Requisitos Funcionales
+
+#### Sistema de Gestión de Pedidos WhatsApp (Bot con IA)
+- **Integración con WhatsApp Business API** vía n8n webhook
+- **AI Agent conversacional** que procesa mensajes de clientes
+- **Detección de intención**:
+  - Consulta de disponibilidad → Responder con stock en tiempo real
+  - Pedido de productos → Agregar a lista de recopilación
+  - Modificación de pedido → Actualizar lista temporal
+  - Confirmación de orden → Generar resumen final estructurado
+- **Recopilación incremental** de productos solicitados:
+  - Cliente escribe "necesito X perfume" → Se agrega a pedido temporal
+  - Cliente escribe "también Y" (3 días después) → Se agrega al mismo pedido
+  - Bot reconoce misma conversación aunque pasen días
+- **Consolidación automática**:
+  - Comando "/resumen" o detección de cierre → Genera resumen estructurado
+  - Formato: Producto | UPC | Cantidad | Precio | Disponibilidad
+  - Se guarda en tab "Pedidos_WhatsApp" de Google Sheets
+  - Incluye validación de stock en tiempo real
+- **Conversación Natural en Español Venezolano**:
+  - Tono casual, amigable, no robótico
+  - Entiende abreviaciones: "nece", "perfume pal viernes", "cuánto sale"
+  - Responde consultas de precio/disponibilidad sin agregar a pedido
+- **Validación de Stock**:
+  - Consulta Google Sheet "Productos" antes de confirmar
+  - Alerta si producto no disponible o stock insuficiente
+  - Sugiere alternativas si hay productos similares
+- **Memoria Contextual**:
+  - Recuerda conversación completa por número de teléfono
+  - Identifica cliente recurrente vs nuevo
+  - Mantiene pedido temporal por hasta 7 días
+- **Generación de Resumen Final**:
+  - Tabla estructurada con todos los productos pedidos
+  - Total calculado (con precios mayorista/minorista según cliente)
+  - Confirmación de disponibilidad completa
+  - Envío automático a Pedro vía WhatsApp o Google Sheet
 
 #### Sistema de Sincronización Automótica
 - GitHub Actions con cron job diario a las 6am UTC
@@ -39,7 +80,7 @@ Sistema completo para gestión automatizada de inventario de perfumes con sincro
 
 #### Sistema de Scraping de imágenes
 - GitHub Actions con cron job diario a las 6:30am UTC
-- Netlify Function scrape-images.js busca en albertocortes.com
+- Vercel Serverless Function scrape-images.js busca en albertocortes.com
 - Bósqueda por UPC primero, fallback a nombre/marca
 - Procesa 20 productos por ejecución (evita rate limiting)
 - Actualiza columna G (imagen_url) en tab "Productos"
@@ -69,7 +110,7 @@ Sistema completo para gestión automatizada de inventario de perfumes con sincro
 - Stock en tiempo real desde Google Sheets
 - Columna "Activo" para ocultar productos
 
-#### Sistema de Pagos y Stock
+#### Sistema de Pagos y Stock *(Pospuesto - Fase Futura)*
 - Integración con MercadoPago (funciona en Venezuela)
 - Cólculo automótico de flete (10% del subtotal)
 - Pagos en bolóvares venezolanos (VES)
@@ -87,7 +128,7 @@ Sistema completo para gestión automatizada de inventario de perfumes con sincro
 - Sincronización completa en < 2 minutos
 
 #### Disponibilidad
-- Uptime >99.5% (Netlify SLA)
+- Uptime >99.9% (Vercel SLA)
 - Fallback si proveedor no disponible (mantiene datos anteriores)
 - Retry automótico en funciones cróticas (3 intentos)
 - Circuit breaker en scraping para evitar baneos
@@ -100,17 +141,20 @@ Sistema completo para gestión automatizada de inventario de perfumes con sincro
 - Validación de webhook de MercadoPago
 
 #### Escalabilidad
-- Arquitectura serverless (Netlify Functions)
+- Arquitectura serverless (Vercel Serverless Functions)
 - Google Sheets como base de datos (hasta 1000 productos)
 - GitHub Actions con lómite de 2000 minutos/mes (suficiente para 60 syncs diarios)
-- CDN global de Netlify
+- CDN global de Vercel (Edge Network)
 
 #### Costos
-- **Total: $0/mes**
-- Netlify Free: 125k requests/mes + 300 min build time
-- GitHub Actions Free: 2000 minutos/mes
-- Google Sheets API: Gratis (hasta 100 requests/100 segundos)
-- MercadoPago: Solo comisión por transacción (2.5-3%)
+- **Total Estimado: ~$15-25/mes** (depende de volumen de mensajes WhatsApp)
+- Vercel Hobby (Free): 100GB bandwidth/mes + Serverless Functions ($0)
+- GitHub Actions Free: 2000 minutos/mes ($0)
+- Google Sheets API: Gratis hasta 100 requests/100 segundos ($0)
+- n8n Cloud Starter: $20/mes (o self-hosted $0)
+- OpenAI GPT-4 mini: ~$5-15/mes (depende de conversaciones)
+- WhatsApp Business API: Gratis hasta cierto límite (Meta)
+- MercadoPago *(Futuro)*: Solo comisión por transacción (2.5-3%)
 
 ## 5. Criterios de óxito
 
@@ -168,14 +212,14 @@ Sistema completo para gestión automatizada de inventario de perfumes con sincro
 ## 7. Cronograma aproximado
 
 ### Fase 1: Sincronización Automótica (Completado)
-- Netlify Function sync-supplier.js
+- Vercel Serverless Function sync-supplier.js
 - GitHub Actions cron job diario
 - Extracción automótica de marca y categoróa
 - Preservación de stock existente
 - Tab "Historial_Sync" para logs
 
 ### Fase 2: Scraping de imágenes (Completado)
-- Netlify Function scrape-images.js
+- Vercel Serverless Function scrape-images.js
 - Bósqueda por UPC y nombre en albertocortes.com
 - GitHub Actions cron job 6:30am UTC
 - Lómite de 20 productos/ejecución
@@ -195,14 +239,24 @@ Sistema completo para gestión automatizada de inventario de perfumes con sincro
 - Carrito de compras
 - Integración get-sheets-data.js
 
-### Fase 5: Pagos y Stock (Completado)
-- Integración MercadoPago
-- Netlify Function create-preference.js
-- Webhook save-order.js
-- Descuento automótico de stock
-- Tab "Pedidos" con historial
+### Fase 5: Bot WhatsApp de Gestión de Pedidos (En Progreso)
+- Integración WhatsApp Business API con n8n
+- AI Agent conversacional con OpenAI GPT-4
+- Sistema de detección de intención (consulta vs pedido)
+- Recopilación incremental de productos en pedidos temporales
+- Consolidación automática con comando /resumen
+- Validación de stock en tiempo real desde Google Sheet
+- Tab "Pedidos_WhatsApp" para historial y seguimiento
+- Generación de resúmenes estructurados para Pedro
+- Memoria contextual por número de teléfono (7 días)
 
-### Fase 6: Optimización y Monitoreo (Continuo)
+### Fase 6: Pagos Online (Pospuesto - Futuro)
+- Integración MercadoPago o gateway alternativo
+- Procesamiento de pagos en línea
+- Descuento automático de stock post-pago
+- Webhooks de confirmación
+
+### Fase 7: Optimización y Monitoreo (Continuo)
 - Logs estructurados
 - Monitoreo de syncs fallidos
 - Ajuste de parómetros de scraping
@@ -212,18 +266,25 @@ Sistema completo para gestión automatizada de inventario de perfumes con sincro
 ## 8. Recursos necesarios
 
 ### Herramientas y Servicios
-- **Netlify**: Hosting + Functions + CI/CD (Free tier)
+- **Vercel**: Hosting + Serverless Functions + Edge Network (Hobby tier gratuito)
 - **GitHub Actions**: Cron jobs automatizados (Free tier 2000 min/mes)
 - **Google Sheets API**: Base de datos y configuración (Gratis)
-- **MercadoPago**: Gateway de pagos (Comisión 2.5-3% por transacción)
+- **n8n**: Orquestación de workflows y bot WhatsApp (Self-hosted o cloud)
+- **WhatsApp Business API**: Canal de comunicación con clientes (Meta)
+- **OpenAI GPT-4**: IA conversacional para bot de pedidos (API)
+- **MercadoPago** *(Futuro)*: Gateway de pagos (Comisión 2.5-3% por transacción)
 - **Google Cloud Console**: Service Account y credenciales (Gratis)
 
 ### Credenciales Requeridas
 - GOOGLE_SHEET_ID: ID del Google Sheet interno
 - GOOGLE_SHEET_PROVEEDOR_ID: 17L9bWDJiGg8RPxnmlv3zwjWYLsiaTsuWvkx5kWBmUkc
 - GOOGLE_SERVICE_ACCOUNT_JSON: JSON completo del service account
-- MP_ACCESS_TOKEN: Token de acceso de MercadoPago
-- NETLIFY_SITE_URL: URL del sitio para GitHub Actions
+- WHATSAPP_PHONE_NUMBER_ID: ID del número de WhatsApp Business
+- WHATSAPP_ACCESS_TOKEN: Token de acceso de WhatsApp Business API
+- OPENAI_API_KEY: API key de OpenAI para GPT-4
+- N8N_WEBHOOK_URL: URL del webhook de n8n para WhatsApp
+- MP_ACCESS_TOKEN *(Futuro)*: Token de acceso de MercadoPago
+- VERCEL_DEPLOYMENT_URL: URL del deployment de Vercel para GitHub Actions
 
 ### Estructura de Google Sheets
 
@@ -243,7 +304,7 @@ Sistema completo para gestión automatizada de inventario de perfumes con sincro
 - K: Precio_Detal_VES (fórmula)
 - L: Activo (TRUE/FALSE para mostrar/ocultar)
 
-**Tab "Pedidos" (A:H)**
+**Tab "Pedidos" (A:H)** *(Para pagos online - Futuro)*
 - A: ID_Pedido
 - B: Fecha
 - C: Cliente
@@ -252,6 +313,18 @@ Sistema completo para gestión automatizada de inventario de perfumes con sincro
 - F: Estado
 - G: Pago_ID
 - H: Notas
+
+**Tab "Pedidos_WhatsApp" (A:J)** *(Activo - Bot WhatsApp)*
+- A: ID_Conversacion (número teléfono + fecha)
+- B: Fecha_Inicio
+- C: Fecha_Ultima_Actualizacion
+- D: Cliente_Nombre
+- E: Cliente_Telefono
+- F: Tipo_Cliente (mayorista/minorista)
+- G: Items_JSON (array de productos solicitados)
+- H: Estado (recopilando/pendiente_confirmacion/confirmado/entregado/cancelado)
+- I: Total_Estimado_VES
+- J: Notas_Bot
 
 **Tab "Config" (A:B)**
 - tasa_usd_ves: 201.22
@@ -270,21 +343,27 @@ Sistema completo para gestión automatizada de inventario de perfumes con sincro
 - Columnas: UPC, Long description, Price-1, Qty Order, Total
 
 ### Stack Tócnico
-- **Frontend**: HTML5, CSS3, JavaScript vanilla
-- **Backend**: Netlify Functions (Node.js serverless)
+- **Frontend**: HTML5, CSS3, JavaScript vanilla (o Next.js)
+- **Backend**: Vercel Serverless Functions (Node.js)
 - **Base de Datos**: Google Sheets (read/write via API)
 - **Scraping**: Axios + Cheerio para parsing HTML
-- **Automatización**: GitHub Actions (cron jobs)
-- **Pagos**: MercadoPago SDK
-- **Hosting**: Netlify (CDN global, SSL automótico)
+- **Automatización**: GitHub Actions (cron jobs) + n8n (workflows)
+- **Bot WhatsApp**: n8n + WhatsApp Business API + OpenAI GPT-4
+- **IA Conversacional**: OpenAI GPT-4 mini para procesamiento de lenguaje natural
+- **Pagos** *(Futuro)*: MercadoPago SDK
+- **Hosting**: Vercel (Edge Network global, SSL automático)
 
 ### Conocimiento Tócnico Necesario
-- JavaScript/Node.js
+- JavaScript/Node.js (y opcionalmente Next.js/React)
 - Google Sheets API v4
-- Netlify Functions y serverless
+- Vercel Serverless Functions y edge computing
 - GitHub Actions y YAML
 - Web scraping (Cheerio)
-- MercadoPago API
+- **n8n workflows y automatización**
+- **WhatsApp Business API**
+- **OpenAI API y prompt engineering**
+- **Gestión de contexto conversacional**
+- MercadoPago API *(Futuro)*
 - Variables de entorno
 - Git/GitHub
 
@@ -303,8 +382,9 @@ Sistema completo para gestión automatizada de inventario de perfumes con sincro
 - **Configuración Actual**: Tasa 201.22 VES/USD, Flete 10%, Margen Mayor 4%, Margen Detal 5%
 - **Sincronización**: Diaria 6am UTC
 - **Scraping**: Diario 6:30am UTC, 20 productos/ejecución
-- **Infraestructura**: $0/mes
+- **Infraestructura Base**: $0/mes (Vercel Hobby + GitHub Actions)
+- **Bot WhatsApp**: ~$15-25/mes (n8n + OpenAI)
 
-**Stack**: Netlify Functions + Google Sheets API + Web Scraping + MercadoPago + GitHub Actions
+**Stack**: Vercel Serverless Functions + Google Sheets API + Web Scraping + n8n + WhatsApp Business API + OpenAI GPT-4 + GitHub Actions + MercadoPago *(Futuro)*
 
 **óltima actualización**: Enero 2025

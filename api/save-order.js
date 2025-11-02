@@ -1,38 +1,29 @@
-// Netlify Function para guardar pedidos y decrementar stock
+// Vercel Function para guardar pedidos y decrementar stock
 // Basado en sw3, modificado para manejar inventario bidireccional
-// URL: /.netlify/functions/save-order
+// URL: /api/save-order
 
-const { google } = require('googleapis');
+import { google } from 'googleapis';
 
-exports.handler = async (event, context) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS'
-  };
+export default async function handler(req, res) {
+  // Configurar CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
 
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers };
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
 
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers,
-      body: JSON.stringify({ error: 'Method not allowed' })
-    };
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const { orderId, customer, items, total, paymentId } = JSON.parse(event.body);
+    const { orderId, customer, items, total, paymentId } = req.body;
 
     // Validar datos requeridos
     if (!orderId || !customer || !items || !total) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: 'Missing required fields' })
-      };
+      return res.status(400).json({ error: 'Missing required fields' });
     }
 
     const auth = new google.auth.GoogleAuth({
@@ -109,26 +100,18 @@ exports.handler = async (event, context) => {
       console.log(`✅ ${updates.length} stocks updated`);
     }
 
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        success: true,
-        orderId,
-        stocksUpdated: updates.length,
-        message: `Order saved and ${updates.length} stocks decremented`
-      })
-    };
+    return res.status(200).json({
+      success: true,
+      orderId,
+      stocksUpdated: updates.length,
+      message: `Order saved and ${updates.length} stocks decremented`
+    });
 
   } catch (error) {
     console.error('❌ Save order error:', error);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({
-        error: error.message,
-        details: error.stack
-      })
-    };
+    return res.status(500).json({
+      error: error.message,
+      details: error.stack
+    });
   }
-};
+}

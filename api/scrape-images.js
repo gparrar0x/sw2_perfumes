@@ -1,8 +1,8 @@
-// Netlify Function para scrapear imágenes de albertocortes.com
+// Vercel Function para scrapear imágenes de albertocortes.com
 // Busca productos sin imagen y los completa desde la web del proveedor
-// URL: /.netlify/functions/scrape-images
+// URL: /api/scrape-images
 
-const { google } = require('googleapis');
+import { google } from 'googleapis';
 
 /**
  * Busca la URL de imagen de un producto en albertocortes.com
@@ -51,22 +51,21 @@ async function buscarImagenProducto(upc, nombre) {
   }
 }
 
-exports.handler = async (event, context) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
-  };
+export default async function handler(req, res) {
+  // Configurar CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers };
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
 
   try {
     // Parámetros opcionales
-    const queryParams = event.queryStringParameters || {};
-    const limit = parseInt(queryParams.limit) || 10; // Cuántos productos procesar por ejecución
-    const forceAll = queryParams.force === 'true'; // Si true, procesa todos aunque tengan imagen
+    const { limit = 10, force = false } = req.query;
+    const limitNum = parseInt(limit);
+    const forceAll = force === 'true';
 
     // 1. Conectar a Google Sheets
     const auth = new google.auth.GoogleAuth({
@@ -100,20 +99,16 @@ exports.handler = async (event, context) => {
         imagen: row[6] || ''
       }))
       .filter(p => !p.imagen || forceAll)
-      .slice(0, limit); // Limitar cantidad por ejecución
+      .slice(0, limitNum); // Limitar cantidad por ejecución
 
     console.log(`🔄 Processing ${productosSinImagen.length} products without images`);
 
     if (productosSinImagen.length === 0) {
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          success: true,
-          message: 'All products already have images',
-          processed: 0
-        })
-      };
+      return res.status(200).json({
+        success: true,
+        message: 'All products already have images',
+        processed: 0
+      });
     }
 
     // 4. Buscar imágenes para cada producto
@@ -168,27 +163,19 @@ exports.handler = async (event, context) => {
       console.warn('⚠️  Could not update Historial_Sync:', error.message);
     }
 
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        success: true,
-        processed: productosSinImagen.length,
-        imagesFound: imagenesEncontradas,
-        imagesMissing: productosSinImagen.length - imagenesEncontradas,
-        message: `Processed ${productosSinImagen.length} products, found ${imagenesEncontradas} images`
-      })
-    };
+    return res.status(200).json({
+      success: true,
+      processed: productosSinImagen.length,
+      imagesFound: imagenesEncontradas,
+      imagesMissing: productosSinImagen.length - imagenesEncontradas,
+      message: `Processed ${productosSinImagen.length} products, found ${imagenesEncontradas} images`
+    });
 
   } catch (error) {
     console.error('❌ Scrape images error:', error);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({
-        error: error.message,
-        details: error.stack
-      })
-    };
+    return res.status(500).json({
+      error: error.message,
+      details: error.stack
+    });
   }
-};
+}

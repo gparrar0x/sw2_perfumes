@@ -9,9 +9,9 @@ jobs:
   scrape:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Netlify Function
+      - name: Trigger Vercel Function
         run: |
-          curl -X GET "${{ secrets.NETLIFY_SITE_URL }}/.netlify/functions/scrape-images?limit=20" \
+          curl -X GET "${{ secrets.VERCEL_DEPLOYMENT_URL }}/api/scrape-images?limit=20" \
                -H "Content-Type: application/json" \
                -w "HTTP Status: %{http_code}\n"
 

@@ -1,5 +1,8 @@
-// CONFIGURACION MERCADOPAGO VENEZUELA
-const MP_PUBLIC_KEY = 'APP_USR-8d9f7a5c-1234-5678-9012-abcdef123456'; // Reemplazar con la public key real de MercadoPago Venezuela
+// CONFIGURACION
+const WHATSAPP_NUMBER = '584121234567'; // Reemplazar con el número de WhatsApp real (código país + número sin +)
+
+// CONFIGURACION MERCADOPAGO VENEZUELA (DESHABILITADO)
+// const MP_PUBLIC_KEY = 'APP_USR-8d9f7a5c-1234-5678-9012-abcdef123456'; // Reemplazar con la public key real de MercadoPago Venezuela
 
 // VARIABLES GLOBALES
 let productos = [];
@@ -49,7 +52,7 @@ async function loadProductsFromBackend() {
     try {
         console.log('Cargando productos desde backend...');
 
-        const response = await fetch('/.netlify/functions/get-sheets-data');
+        const response = await fetch('/api/get-sheets-data');
 
         if (!response.ok) {
             throw new Error(`Error HTTP: ${response.status}`);
@@ -340,8 +343,86 @@ function closeCheckoutModal() {
     document.getElementById('checkout-form').reset();
 }
 
+// ENVIAR PEDIDO POR WHATSAPP
+function processPayment() {
+    const name = document.getElementById('customer-name').value.trim();
+    const email = document.getElementById('customer-email').value.trim();
+    const phone = document.getElementById('customer-phone').value.trim();
+    const notes = document.getElementById('customer-notes').value.trim();
+
+    // Validaciones
+    if (!name) {
+        alert('Por favor ingresa tu nombre');
+        return;
+    }
+
+    if (!phone) {
+        alert('Por favor ingresa tu teléfono');
+        return;
+    }
+
+    if (carrito.length === 0) {
+        alert('El carrito está vacío');
+        return;
+    }
+
+    const { subtotal, flete, total } = calcularTotales();
+
+    // Construir mensaje de WhatsApp
+    let mensaje = `✨ *¡NUEVO PEDIDO DE PERFUMES!* ✨\n`;
+    mensaje += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    mensaje += `👤 *DATOS DEL CLIENTE*\n`;
+    mensaje += `• Nombre: ${name}\n`;
+    mensaje += `• Email: ${email}\n`;
+    mensaje += `• Teléfono: ${phone}\n\n`;
+
+    mensaje += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    mensaje += `🎁 *PRODUCTOS SOLICITADOS*\n\n`;
+
+    carrito.forEach((item, index) => {
+        const tipoVenta = item.modoVenta === 'mayor' ? '📦 Mayorista' : '🛍️ Minorista';
+        mensaje += `${index + 1}️⃣ *${item.marca}*\n`;
+        mensaje += `   ${item.nombre}\n`;
+        mensaje += `   ${tipoVenta} | Cant: ${item.cantidad} unid.\n`;
+        mensaje += `   💵 Bs. ${formatPrice(item.precio)} c/u → *Bs. ${formatPrice(item.precio * item.cantidad)}*\n\n`;
+    });
+
+    mensaje += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    mensaje += `💰 *RESUMEN DE PAGO*\n\n`;
+    mensaje += `Subtotal: Bs. ${formatPrice(subtotal)}\n`;
+    mensaje += `🚚 Envío (10%): Bs. ${formatPrice(flete)}\n`;
+    mensaje += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    mensaje += `✅ *TOTAL A PAGAR: Bs. ${formatPrice(total)}*\n`;
+    mensaje += `━━━━━━━━━━━━━━━━━━━━━\n`;
+
+    if (notes) {
+        mensaje += `\n📝 *Notas adicionales:*\n${notes}\n`;
+    }
+
+    mensaje += `\n¡Gracias por tu pedido! 🙏✨`;
+
+    // Codificar mensaje para URL
+    const mensajeCodificado = encodeURIComponent(mensaje);
+    const whatsappURL = `https://wa.me/${WHATSAPP_NUMBER}?text=${mensajeCodificado}`;
+
+    // Abrir WhatsApp
+    window.open(whatsappURL, '_blank');
+
+    // Limpiar carrito y cerrar modal
+    carrito = [];
+    updateCartUI();
+    closeCheckoutModal();
+
+    showToast('Pedido enviado a WhatsApp ✅');
+}
+
+/* ============================================
+   CODIGO MERCADOPAGO (DESHABILITADO)
+   ============================================
+
 // PROCESAR PAGO CON MERCADOPAGO
-async function processPayment() {
+async function processPaymentMercadoPago() {
     const name = document.getElementById('customer-name').value.trim();
     const email = document.getElementById('customer-email').value.trim();
     const phone = document.getElementById('customer-phone').value.trim();
@@ -432,7 +513,7 @@ async function processPayment() {
 
         console.log('Creando preferencia de pago...');
 
-        const response = await fetch('/.netlify/functions/create-preference', {
+        const response = await fetch('/api/create-preference', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -466,6 +547,8 @@ async function processPayment() {
         btnPayment.disabled = false;
     }
 }
+
+   ============================================ */
 
 // MOSTRAR ERROR
 function showError(message) {

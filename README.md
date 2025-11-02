@@ -2,6 +2,13 @@
 
 Sistema automatizado para gestión de inventario, sincronización de catálogo y ventas online de perfumes.
 
+## 🚀 URLs de Deployment
+
+- **Producción:** https://sw-commerce-perfumes.vercel.app (pendiente deploy final)
+- **Preview:** https://sw-commerce-perfumes-ctgw5c0pa-gparrar-3019s-projects.vercel.app
+- **Dashboard:** https://vercel.com/gparrar-3019s-projects/sw-commerce-perfumes
+- **Local:** http://localhost:3000 (`npm run dev`)
+
 ## 🎯 Características
 
 - ✅ **Sync automático desde Google Sheet del proveedor** (Excel de Alberto Cortés)
@@ -12,7 +19,7 @@ Sistema automatizado para gestión de inventario, sincronización de catálogo y
 - ✅ **Pagos con MercadoPago** (funciona en Venezuela)
 - ✅ **Stock en tiempo real** decrementado automáticamente al vender
 - ✅ **Flete 10% calculado en checkout** (no en precio unitario)
-- ✅ **$0/mes infraestructura** (Netlify + Google Sheets + GitHub Actions gratis)
+- ✅ **$0/mes infraestructura** (Vercel Hobby + Google Sheets + GitHub Actions gratis)
 
 ## 🏗️ Arquitectura
 
@@ -21,7 +28,7 @@ Google Sheet Proveedor (Source of Truth)
           ↓
 GitHub Actions (cron 6am diario)
           ↓
-Netlify Function (sync-supplier.js)
+Vercel Serverless Function (sync-supplier.js)
   - Lee Excel del proveedor
   - Extrae marca automáticamente
   - Detecta categoría (EDT/EDP/Cologne)
@@ -32,7 +39,7 @@ Google Sheet Interno (Productos)
   - Tasa USD/VES configurable (201.22)
   - Márgenes: Mayor 4%, Detal 5%
           ↓
-Netlify Function (scrape-images.js)
+Vercel Function (scrape-images.js)
   - Busca imágenes en albertocortes.com
   - Por UPC o nombre
   - 10 productos por ejecución
@@ -55,62 +62,65 @@ Webhook → save-order.js
 
 ### 1. Requisitos Previos
 
-- Cuenta de Netlify
+- Cuenta de Vercel (gratis)
 - Google Cloud Project con Sheets API habilitado
 - Service Account de Google
 - Token de MercadoPago
 - Google Sheet creado (ver `GOOGLE_SHEETS_SETUP.md`)
 
-### 2. Instalación Local
+### 2. Desarrollo Local
 
 ```bash
-# Clonar repo
-cd projects/sw4_perfumes_inventory
-
 # Instalar dependencias
 npm install
 
 # Copiar .env.example a .env y llenar credenciales
 cp .env.example .env
 
-# Editar .env con tus credenciales
-# GOOGLE_SHEET_ID=...
+# Editar .env con tus credenciales:
+# GOOGLE_SHEET_ID=tu_sheet_id
+# GOOGLE_SHEET_PROVEEDOR_ID=17L9bWDJiGg8RPxnmlv3zwjWYLsiaTsuWvkx5kWBmUkc
 # GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account"...}
-# MP_ACCESS_TOKEN=...
+# MP_ACCESS_TOKEN=tu_token_mercadopago
 
-# Iniciar servidor de desarrollo
+# Iniciar servidor de desarrollo local
 npm run dev
+# → http://localhost:3000
 ```
 
-### 3. Deploy a Netlify
+**Nota:** El servidor custom (`dev-server.js`) simula el comportamiento de Vercel Functions localmente, cargando env vars desde `.env.local` o `.env`.
+
+### 3. Deploy a Vercel
 
 ```bash
-# Inicializar git
-git init
-git add .
-git commit -m "🎉 Initial setup SW4"
+# Instalar Vercel CLI (si no lo tienes)
+npm install -g vercel
 
-# Crear repo en GitHub
-gh repo create sw4-perfumes-inventory --private --source=. --push
+# Login a Vercel
+vercel login
 
-# Deploy a Netlify
-netlify init
-# Sigue las instrucciones interactivas
+# Deploy a preview
+vercel
 
-# Configurar variables de entorno en Netlify
-# Site Settings → Environment Variables → Add:
+# Configurar env vars en Vercel Dashboard:
+# https://vercel.com/<tu-user>/<proyecto>/settings/environment-variables
+# Agregar las 4 variables:
 # - GOOGLE_SHEET_ID
+# - GOOGLE_SHEET_PROVEEDOR_ID
 # - GOOGLE_SERVICE_ACCOUNT_JSON
 # - MP_ACCESS_TOKEN
 
-# Deploy
-git push origin main
+# Deploy a producción
+vercel --prod
 ```
+
+**Documentación completa:** Ver `docs/VERCEL_DEPLOYMENT_PLAN.md` y `docs/DEPLOYMENT_STATUS.md`
 
 ### 4. Configurar GitHub Actions
 
 1. Ve a tu repo en GitHub → Settings → Secrets and variables → Actions
-2. Agregar secret: `NETLIFY_SITE_URL` con valor `https://tu-sitio.netlify.app`
+2. Agregar secret: `VERCEL_DEPLOYMENT_URL` con valor `https://sw-commerce-perfumes.vercel.app`
+3. Los workflows en `.github/workflows/` se ejecutarán automáticamente
 
 ## 📊 Estructura de Google Sheets
 
@@ -126,42 +136,58 @@ Ver `GOOGLE_SHEETS_SETUP.md` para detalles completos.
 - ID: `17L9bWDJiGg8RPxnmlv3zwjWYLsiaTsuWvkx5kWBmUkc`
 - Columnas: UPC, Long description, Price-1, Qty Order, Total
 
-## 🔧 Netlify Functions
+## 🔧 Vercel Serverless Functions
 
 | Function | URL | Descripción |
 |----------|-----|-------------|
-| `sync-supplier.js` | `/.netlify/functions/sync-supplier` | Sincroniza productos desde Google Sheet del proveedor |
-| `scrape-images.js` | `/.netlify/functions/scrape-images` | Busca imágenes en albertocortes.com por UPC/nombre |
-| `get-sheets-data.js` | `/.netlify/functions/get-sheets-data` | Lee catálogo y config (cache 5min) |
-| `save-order.js` | `/.netlify/functions/save-order` | Guarda pedido y decrementa stock |
-| `create-preference.js` | `/.netlify/functions/create-preference` | Crea preferencia de pago MP |
-| `get-orders.js` | `/.netlify/functions/get-orders` | Lee histórico de pedidos |
+| `sync-supplier.js` | `/api/sync-supplier` | Sincroniza productos desde Google Sheet del proveedor |
+| `scrape-images.js` | `/api/scrape-images` | Busca imágenes en albertocortes.com por UPC/nombre |
+| `get-sheets-data.js` | `/api/get-sheets-data` | Lee catálogo y config (cache 5min) |
+| `save-order.js` | `/api/save-order` | Guarda pedido y decrementa stock |
+| `create-preference.js` | `/api/create-preference` | Crea preferencia de pago MP |
+| `get-orders.js` | `/api/get-orders` | Lee histórico de pedidos |
+| `test-env.js` | `/api/test-env` | Verifica env vars (desarrollo) |
 
 ## 🧪 Testing
 
-### Test local del sync
+### Test local
 
 ```bash
-# Iniciar servidor local
+# Iniciar servidor de desarrollo
 npm run dev
 
-# En otra terminal, ejecutar sync manual
-curl -X POST http://localhost:8888/.netlify/functions/sync-supplier
+# En otra terminal:
+
+# 1. Verificar env vars
+curl http://localhost:3000/api/test-env | jq .
+
+# 2. Test de catálogo
+curl http://localhost:3000/api/get-sheets-data | jq '.productos | length'
+
+# 3. Sync manual
+curl -X POST http://localhost:3000/api/sync-supplier -H "Content-Type: application/json"
+
+# 4. Scraping de imágenes
+curl http://localhost:3000/api/scrape-images?limit=5 | jq .
 ```
 
-### Test de catálogo
+### Test del frontend local
 
-```bash
-# Leer productos
-curl http://localhost:8888/.netlify/functions/get-sheets-data
-```
-
-### Test del frontend
-
-1. Abre `http://localhost:8888` en el navegador
+1. Abre `http://localhost:3000` en el navegador
 2. Deberías ver el catálogo de perfumes
 3. Probar filtros por marca y búsqueda
 4. Probar agregar al carrito
+
+### Test en producción
+
+```bash
+# Reemplazar con tu URL de Vercel
+VERCEL_URL="https://sw-commerce-perfumes.vercel.app"
+
+# Test APIs
+curl $VERCEL_URL/api/test-env | jq .
+curl $VERCEL_URL/api/get-sheets-data | jq '.productos | length'
+```
 
 ## 🚀 Flujo de Trabajo
 
@@ -169,7 +195,7 @@ curl http://localhost:8888/.netlify/functions/get-sheets-data
 
 **6:00am UTC - Sync de Productos:**
 1. GitHub Actions ejecuta cron
-2. Llama a `/.netlify/functions/sync-supplier`
+2. Llama a `/api/sync-supplier`
 3. Lee Google Sheet del proveedor (columnas A-C: UPC, descripción, precio)
 4. Extrae marca (primera palabra de la descripción)
 5. Detecta categoría (EDT/EDP/Cologne/etc)
@@ -179,7 +205,7 @@ curl http://localhost:8888/.netlify/functions/get-sheets-data
 
 **6:30am UTC - Scraping de Imágenes:**
 1. GitHub Actions ejecuta segundo cron
-2. Llama a `/.netlify/functions/scrape-images?limit=20`
+2. Llama a `/api/scrape-images?limit=20`
 3. Busca productos sin imagen (columna G vacía)
 4. Para cada uno, busca en albertocortes.com por UPC
 5. Si no encuentra, busca por nombre/marca
@@ -229,9 +255,9 @@ Total: Bs. 23,240.91
 
 ### Error: "GOOGLE_SHEET_ID not configured"
 
-1. Verifica que `.env` tenga `GOOGLE_SHEET_ID` correcto
-2. En Netlify: Site Settings → Environment Variables
-3. Asegúrate de que el Sheet ID sea el correcto (desde la URL)
+1. Verifica que `.env` o `.env.local` tenga `GOOGLE_SHEET_ID` correcto
+2. En Vercel: Settings → Environment Variables (https://vercel.com/.../settings/environment-variables)
+3. Asegúrate de que el Sheet ID sea el correcto (desde la URL del Sheet)
 
 ### Error: "Service account not found"
 
@@ -243,10 +269,10 @@ Total: Bs. 23,240.91
 
 1. Verifica que `GOOGLE_SHEET_PROVEEDOR_ID` esté configurado correctamente
 2. Verifica que el Sheet del proveedor tenga productos en `Sheet1!A2:E`
-3. Revisa logs en Netlify: Functions → `sync-supplier` → Logs
+3. Revisa logs en Vercel: Dashboard → Deployments → (click deployment) → Functions
 4. Ejecuta sync manual para ver errores:
    ```bash
-   curl -X POST https://tu-sitio.netlify.app/.netlify/functions/sync-supplier
+   curl -X POST https://sw-commerce-perfumes.vercel.app/api/sync-supplier
    ```
 
 ### Imágenes no aparecen
@@ -254,23 +280,26 @@ Total: Bs. 23,240.91
 1. Verifica que `albertocortes.com` esté accesible
 2. Ejecuta scraping manual:
    ```bash
-   curl https://tu-sitio.netlify.app/.netlify/functions/scrape-images?limit=5
+   curl https://sw-commerce-perfumes.vercel.app/api/scrape-images?limit=5
    ```
-3. Revisa logs para ver qué productos no se encontraron
+3. Revisa logs de Vercel para ver qué productos no se encontraron
 4. Puedes forzar re-scraping con `?force=true`
 
 ### Stock no se decrementa
 
 1. Verifica que los **UPC** del pedido coincidan con columna A en "Productos"
-2. Revisa logs de `save-order` en Netlify
+2. Revisa logs de `save-order` en Vercel Dashboard → Functions
 3. Verifica permisos del Service Account (debe ser Editor, no solo Viewer)
 4. El stock está en **columna F**, no en E
 
 ## 📚 Documentación Adicional
 
+- `docs/VERCEL_DEPLOYMENT_PLAN.md` - Plan completo de deployment a Vercel (7 fases)
+- `docs/DEPLOYMENT_STATUS.md` - Estado actual + próximos pasos + checklist
 - `GOOGLE_SHEETS_SETUP.md` - Guía detallada del setup de Google Sheets
 - `.env.example` - Template de variables de entorno
-- `docs/sw4_perfumes_inventory_system.md` - Documento de arquitectura completo
+- `docs/PRD.md` - Product Requirements Document
+- `dev-server.js` - Servidor de desarrollo local custom (simula Vercel)
 
 ## 🤝 Soporte
 
@@ -282,7 +311,7 @@ Para dudas o problemas:
 
 **Hecho con ❤️ por Skywalking.dev** 🚀
 
-**Stack:** Netlify Functions + Google Sheets API + Web Scraping + MercadoPago + GitHub Actions
+**Stack:** Vercel Serverless Functions + Google Sheets API + Web Scraping + MercadoPago + GitHub Actions
 
 **Configuración actual:**
 - Tasa: 201.22 VES/USD

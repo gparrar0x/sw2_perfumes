@@ -2,15 +2,19 @@
   "name": "sw4-perfumes-inventory",
   "version": "1.0.0",
   "description": "Sistema de inventario y catálogo de perfumes",
+  "type": "module",
   "main": "index.html",
   "scripts": {
-    "dev": "netlify dev",
+    "dev": "node load-env.js",
+    "dev:simple": "python3 -m http.server 8000",
+    "dev:vercel": "vercel dev --listen 3000",
     "build": "echo 'Static site - no build needed'"
   },
   "dependencies": {
-    "googleapis": "^126.0.0",
-    "netlify-cli": "^17.0.0",
-    "node-fetch": "^2.7.0"
+    "googleapis": "^126.0.0"
+  },
+  "devDependencies": {
+    "vercel": "^33.0.0"
   },
   "engines": {
     "node": ">=18.0.0"

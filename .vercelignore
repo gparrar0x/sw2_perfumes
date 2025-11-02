@@ -1,0 +1,13 @@
+node_modules
+.env
+.env.local
+.git
+.netlify
+netlify
+netlify.toml
+*.log
+.DS_Store
+docs
+README.md
+*.md
+test-sync.sh

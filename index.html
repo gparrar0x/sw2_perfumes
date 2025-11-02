@@ -11,7 +11,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@400;500;600&display=swap" rel="stylesheet">
     <!-- Premium Design System -->
     <link rel="stylesheet" href="assets/premium.css">
-    <script src="https://sdk.mercadopago.com/js/v2"></script>
+    <!-- MercadoPago SDK (DESHABILITADO) -->
+    <!-- <script src="https://sdk.mercadopago.com/js/v2"></script> -->
 </head>
 <body>
     <div class="container">
@@ -77,7 +78,6 @@
         <span class="cart-icon">🛒</span>
         <div class="cart-info">
             <div class="cart-total">Bs. <span id="cart-total">0.00</span></div>
-            <div class="cart-count"><span id="cart-count">0</span> productos</div>
         </div>
     </div>
 
@@ -102,8 +102,8 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="customer-phone">Teléfono (opcional)</label>
-                    <input type="tel" id="customer-phone" placeholder="+58 412 1234567">
+                    <label for="customer-phone">Teléfono *</label>
+                    <input type="tel" id="customer-phone" required placeholder="+58 412 1234567">
                 </div>
 
                 <div class="form-group">
@@ -114,7 +114,7 @@
 
             <div class="modal-buttons">
                 <button class="btn-secondary" onclick="closeCheckoutModal()">Cancelar</button>
-                <button class="btn-payment" onclick="processPayment()">Pagar con MercadoPago</button>
+                <button class="btn-payment" onclick="processPayment()">Enviar Pedido por WhatsApp</button>
             </div>
         </div>
     </div>

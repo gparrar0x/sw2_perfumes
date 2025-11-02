@@ -1,51 +1,35 @@
-// Netlify Function para obtener pedidos desde Google Sheets
-const fetch = require('node-fetch');
+// Vercel Function para obtener pedidos desde Google Sheets
 
-exports.handler = async (event, context) => {
+export default async function handler(req, res) {
     // Configurar CORS
-    const headers = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS'
-    };
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
 
     // Manejar preflight request
-    if (event.httpMethod === 'OPTIONS') {
-        return {
-            statusCode: 200,
-            headers
-        };
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
     }
 
     // Solo permitir GET
-    if (event.httpMethod !== 'GET') {
-        return {
-            statusCode: 405,
-            headers,
-            body: JSON.stringify({ error: 'Method not allowed' })
-        };
+    if (req.method !== 'GET') {
+        return res.status(405).json({ error: 'Method not allowed' });
     }
 
     try {
         // Verificar variables de entorno
         const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
         const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID;
-        
+
         if (!GOOGLE_API_KEY || !GOOGLE_SHEET_ID) {
-            return {
-                statusCode: 500,
-                headers,
-                body: JSON.stringify({ 
-                    error: 'Server configuration error',
-                    message: 'Missing Google Sheets credentials'
-                })
-            };
+            return res.status(500).json({
+                error: 'Server configuration error',
+                message: 'Missing Google Sheets credentials'
+            });
         }
 
         // Obtener parámetros de consulta
-        const queryParams = event.queryStringParameters || {};
-        const status = queryParams.status; // Filtrar por estado si se proporciona
-        const limit = parseInt(queryParams.limit) || 50; // Límite de resultados
+        const { status, limit = 50 } = req.query;
 
         // URL para obtener datos de la pestaña Pedidos
         const url = `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_ID}/values/Pedidos?key=${GOOGLE_API_KEY}`;
@@ -57,37 +41,29 @@ exports.handler = async (event, context) => {
         if (!response.ok) {
             const errorText = await response.text();
             console.error('Google Sheets API error:', response.status, errorText);
-            
-            return {
-                statusCode: response.status,
-                headers,
-                body: JSON.stringify({ 
-                    error: `Google Sheets API error: ${response.status}`,
-                    details: errorText
-                })
-            };
+
+            return res.status(response.status).json({
+                error: `Google Sheets API error: ${response.status}`,
+                details: errorText
+            });
         }
 
         const data = await response.json();
-        
+
         if (!data.values || data.values.length === 0) {
-            return {
-                statusCode: 200,
-                headers,
-                body: JSON.stringify({
-                    success: true,
-                    orders: [],
-                    total: 0,
-                    message: 'No orders found'
-                })
-            };
+            return res.status(200).json({
+                success: true,
+                orders: [],
+                total: 0,
+                message: 'No orders found'
+            });
         }
 
         // Parsear pedidos (asumiendo que la primera fila son headers)
         const headers_row = data.values[0];
         const orders = [];
 
-        for (let i = 1; i < data.values.length && orders.length < limit; i++) {
+        for (let i = 1; i < data.values.length && orders.length < parseInt(limit); i++) {
             const row = data.values[i];
             if (row && row.length > 0) {
                 const order = {
@@ -110,31 +86,23 @@ exports.handler = async (event, context) => {
             }
         }
 
-        return {
-            statusCode: 200,
-            headers,
-            body: JSON.stringify({
-                success: true,
-                orders: orders,
-                total: orders.length,
-                filtered: !!status,
-                lastUpdated: new Date().toISOString()
-            })
-        };
+        return res.status(200).json({
+            success: true,
+            orders: orders,
+            total: orders.length,
+            filtered: !!status,
+            lastUpdated: new Date().toISOString()
+        });
 
     } catch (error) {
         console.error('Error fetching orders:', error);
-        
-        return {
-            statusCode: 500,
-            headers,
-            body: JSON.stringify({ 
-                error: 'Internal server error',
-                message: error.message
-            })
-        };
+
+        return res.status(500).json({
+            error: 'Internal server error',
+            message: error.message
+        });
     }
-};
+}
 
 // Función auxiliar para parsear items JSON
 function parseOrderItems(itemsJson) {

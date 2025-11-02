@@ -9,10 +9,11 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Netlify Function
+      - name: Trigger Vercel Function
         run: |
-          curl -X POST "${{ secrets.NETLIFY_SITE_URL }}/.netlify/functions/sync-supplier" \
+          curl -X POST "${{ secrets.VERCEL_DEPLOYMENT_URL }}/api/sync-supplier" \
                -H "Content-Type: application/json" \
+               -d '{"source": "github-actions"}' \
                -w "HTTP Status: %{http_code}\n"
 
       - name: Notify on failure

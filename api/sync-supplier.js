@@ -1,8 +1,8 @@
-// Netlify Function que sincroniza productos desde Google Sheet del proveedor
-// Ejecutado por GitHub Actions cron diario o trigger manual
-// URL: /.netlify/functions/sync-supplier
+// Vercel Function que sincroniza productos desde Google Sheet del proveedor
+// Ejecutado por Vercel Cron diario o trigger manual
+// URL: /api/sync-supplier
 
-const { google } = require('googleapis');
+import { google } from 'googleapis';
 
 /**
  * Extrae la marca de la descripción del producto
@@ -30,15 +30,14 @@ function detectarCategoria(descripcion) {
   return 'Fragancia';
 }
 
-exports.handler = async (event, context) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
-  };
+export default async function handler(req, res) {
+  // Configurar CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers };
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
 
   try {
@@ -61,7 +60,7 @@ exports.handler = async (event, context) => {
     console.log('🔄 Reading supplier sheet...');
     const proveedorResponse = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_PROVEEDOR_ID,
-      range: 'Sheet1!A2:E', // Asume que los datos están en Sheet1, ajustar si es necesario
+      range: 'List Price!A14:E', // Los datos empiezan en fila 14 después de los headers
     });
 
     const proveedorRows = proveedorResponse.data.values || [];
@@ -158,27 +157,19 @@ exports.handler = async (event, context) => {
       console.warn('⚠️  Could not update Historial_Sync:', error.message);
     }
 
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        success: true,
-        productsUpdated: productos.length,
-        stockPreserved: Object.keys(stockActual).length,
-        lastSync: new Date().toISOString(),
-        message: `Synced ${productos.length} products from supplier sheet`
-      })
-    };
+    return res.status(200).json({
+      success: true,
+      productsUpdated: productos.length,
+      stockPreserved: Object.keys(stockActual).length,
+      lastSync: new Date().toISOString(),
+      message: `Synced ${productos.length} products from supplier sheet`
+    });
 
   } catch (error) {
     console.error('❌ Sync error:', error);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({
-        error: error.message,
-        details: error.stack
-      })
-    };
+    return res.status(500).json({
+      error: error.message,
+      details: error.stack
+    });
   }
-};
+}
