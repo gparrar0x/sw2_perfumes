@@ -11,6 +11,7 @@
     "build": "echo 'Static site - no build needed'"
   },
   "dependencies": {
+    "dotenv": "^17.2.3",
     "googleapis": "^126.0.0"
   },
   "devDependencies": {

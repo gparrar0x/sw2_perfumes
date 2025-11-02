@@ -1,5 +1,5 @@
 // CONFIGURACION
-const WHATSAPP_NUMBER = '584121234567'; // Reemplazar con el número de WhatsApp real (código país + número sin +)
+const WHATSAPP_NUMBER = '584140161454'; // Número de WhatsApp (código país + número sin +)
 
 // CONFIGURACION MERCADOPAGO VENEZUELA (DESHABILITADO)
 // const MP_PUBLIC_KEY = 'APP_USR-8d9f7a5c-1234-5678-9012-abcdef123456'; // Reemplazar con la public key real de MercadoPago Venezuela
@@ -235,6 +235,14 @@ function addToCart(upc) {
     const itemExistente = carrito.find(item => item.upc === upc && item.modoVenta === modoVenta);
 
     if (itemExistente) {
+        // Verificar que no exceda el stock disponible
+        const cantidadTotalEnCarrito = itemExistente.cantidad + 1;
+
+        if (cantidadTotalEnCarrito > producto.stock) {
+            alert(`Solo hay ${producto.stock} unidades disponibles de este producto`);
+            return;
+        }
+
         itemExistente.cantidad++;
     } else {
         const precio = modoVenta === 'mayor' ? producto.precioMayorVES : producto.precioDetalVES;
@@ -245,7 +253,8 @@ function addToCart(upc) {
             marca: producto.marca,
             precio: precio,
             cantidad: 1,
-            modoVenta: modoVenta
+            modoVenta: modoVenta,
+            stockDisponible: producto.stock // Guardar stock para referencia
         });
     }
 
@@ -261,11 +270,17 @@ function updateCartUI() {
     const totalItems = carrito.reduce((sum, item) => sum + item.cantidad, 0);
     const { subtotal } = calcularTotales();
 
-    document.getElementById('cart-count').textContent = totalItems;
+    const cartCountElement = document.getElementById('cart-count');
+    const cartButton = document.getElementById('cart-button');
+
+    // Actualizar badge con cantidad
+    cartCountElement.textContent = totalItems;
+    cartCountElement.style.display = totalItems > 0 ? 'inline-block' : 'none';
+
+    // Actualizar total
     document.getElementById('cart-total').textContent = formatPrice(subtotal);
 
     // Mostrar/ocultar carrito
-    const cartButton = document.getElementById('cart-button');
     cartButton.style.display = totalItems > 0 ? 'flex' : 'none';
 }
 
@@ -347,17 +362,11 @@ function closeCheckoutModal() {
 function processPayment() {
     const name = document.getElementById('customer-name').value.trim();
     const email = document.getElementById('customer-email').value.trim();
-    const phone = document.getElementById('customer-phone').value.trim();
     const notes = document.getElementById('customer-notes').value.trim();
 
     // Validaciones
     if (!name) {
         alert('Por favor ingresa tu nombre');
-        return;
-    }
-
-    if (!phone) {
-        alert('Por favor ingresa tu teléfono');
         return;
     }
 
@@ -374,8 +383,10 @@ function processPayment() {
 
     mensaje += `👤 *DATOS DEL CLIENTE*\n`;
     mensaje += `• Nombre: ${name}\n`;
-    mensaje += `• Email: ${email}\n`;
-    mensaje += `• Teléfono: ${phone}\n\n`;
+    if (email) {
+        mensaje += `• Email: ${email}\n`;
+    }
+    mensaje += `\n`;
 
     mensaje += `━━━━━━━━━━━━━━━━━━━━━\n`;
     mensaje += `🎁 *PRODUCTOS SOLICITADOS*\n\n`;

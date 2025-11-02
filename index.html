@@ -75,7 +75,10 @@
 
     <!-- Carrito flotante -->
     <div class="cart-fixed" id="cart-button" style="display: none;" onclick="openCheckoutModal()">
-        <span class="cart-icon">🛒</span>
+        <span class="cart-icon">
+            🛒
+            <span class="cart-badge" id="cart-count" style="display: none;">0</span>
+        </span>
         <div class="cart-info">
             <div class="cart-total">Bs. <span id="cart-total">0.00</span></div>
         </div>
@@ -97,13 +100,8 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="customer-email">Email *</label>
-                    <input type="email" id="customer-email" required placeholder="tu-email@ejemplo.com">
-                </div>
-
-                <div class="form-group">
-                    <label for="customer-phone">Teléfono *</label>
-                    <input type="tel" id="customer-phone" required placeholder="+58 412 1234567">
+                    <label for="customer-email">Email (opcional)</label>
+                    <input type="email" id="customer-email" placeholder="tu-email@ejemplo.com">
                 </div>
 
                 <div class="form-group">

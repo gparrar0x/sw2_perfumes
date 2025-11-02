@@ -6,43 +6,74 @@ import { google } from 'googleapis';
 
 /**
  * Busca la URL de imagen de un producto en albertocortes.com
- * Intenta por UPC primero, luego por nombre
+ * Estrategia:
+ * 1. Buscar producto por UPC
+ * 2. Extraer link a página del producto
+ * 3. Buscar imagen en elemento FeaturedImage-product-template
  */
 async function buscarImagenProducto(upc, nombre) {
   try {
-    // Estrategia 1: Buscar por UPC en la búsqueda de Shopify
-    let searchUrl = `https://albertocortes.com/search?q=${encodeURIComponent(upc)}&type=product`;
-
+    // Paso 1: Buscar producto por UPC
+    const searchUrl = `https://albertocortes.com/search?q=${encodeURIComponent(upc)}&type=product`;
     console.log(`🔍 Searching for UPC: ${upc}`);
+
     let response = await fetch(searchUrl);
     let html = await response.text();
 
-    // Buscar imagen en el HTML (Shopify CDN pattern)
-    let imageMatch = html.match(/https:\/\/cdn\.shopify\.com\/s\/files\/[^"'\s]+\.(jpg|jpeg|png|webp)/i);
+    // Paso 2: Extraer link al producto
+    const productLinkMatch = html.match(/href="(\/products\/[^"]+)"/i);
 
-    if (imageMatch) {
-      console.log(`✅ Found image for UPC ${upc}`);
-      return imageMatch[0];
+    if (!productLinkMatch || !productLinkMatch[1]) {
+      console.log(`⚠️  No product link found for UPC ${upc}`);
+      return null;
     }
 
-    // Estrategia 2: Buscar por nombre (primera palabra = marca)
-    if (nombre) {
-      const marca = nombre.split(' ')[0];
-      searchUrl = `https://albertocortes.com/search?q=${encodeURIComponent(marca)}&type=product`;
+    const productUrl = `https://albertocortes.com${productLinkMatch[1]}`;
+    console.log(`📄 Found product page: ${productUrl}`);
 
-      console.log(`🔍 Searching by brand: ${marca}`);
-      response = await fetch(searchUrl);
-      html = await response.text();
+    // Paso 3: Acceder a la página del producto
+    response = await fetch(productUrl);
+    html = await response.text();
 
-      imageMatch = html.match(/https:\/\/cdn\.shopify\.com\/s\/files\/[^"'\s]+\.(jpg|jpeg|png|webp)/i);
+    // Paso 4: Buscar imagen en FeaturedImage-product-template
+    // Patrón: <img id="FeaturedImage-product-template-..." src="//albertocortes.com/cdn/shop/files/..."
+    const featuredImageMatch = html.match(/<img[^>]*id="FeaturedImage-product-template-[^"]*"[^>]*src="([^"]+)"/i);
 
-      if (imageMatch) {
-        console.log(`✅ Found image for brand ${marca}`);
-        return imageMatch[0];
+    if (featuredImageMatch && featuredImageMatch[1]) {
+      let imageUrl = featuredImageMatch[1];
+
+      // Agregar https: si la URL empieza con //
+      if (imageUrl.startsWith('//')) {
+        imageUrl = 'https:' + imageUrl;
       }
+
+      // Reemplazar {width} con un tamaño específico (usamos 800x800 para buena calidad)
+      imageUrl = imageUrl.replace('{width}x', '800x800');
+      imageUrl = imageUrl.replace('_{width}x', '_800x800');
+
+      console.log(`✅ Found product image: ${imageUrl}`);
+      return imageUrl;
     }
 
-    console.log(`⚠️  No image found for UPC ${upc}`);
+    // Fallback: Buscar en data-zoom attribute del contenedor
+    const dataZoomMatch = html.match(/id="FeaturedImageZoom-[^"]*"[^>]*data-zoom="([^"]+)"/i);
+
+    if (dataZoomMatch && dataZoomMatch[1]) {
+      let imageUrl = dataZoomMatch[1];
+
+      if (imageUrl.startsWith('//')) {
+        imageUrl = 'https:' + imageUrl;
+      }
+
+      // Reemplazar {width} placeholder
+      imageUrl = imageUrl.replace('{width}x', '800x800');
+      imageUrl = imageUrl.replace('_{width}x', '_800x800');
+
+      console.log(`✅ Found product image (data-zoom): ${imageUrl}`);
+      return imageUrl;
+    }
+
+    console.log(`⚠️  No product image found for UPC ${upc}`);
     return null;
 
   } catch (error) {
