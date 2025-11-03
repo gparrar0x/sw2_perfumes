@@ -19,6 +19,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Cargar productos
     loadProductsFromBackend();
+    
+    // Auto-refresh cada 2 minutos para mantener el stock actualizado (no tan agresivo)
+    setInterval(() => {
+        console.log('Auto-refreshing productos...');
+        loadProductsFromBackend(true);
+    }, 2 * 60 * 1000); // 2 minutos
 });
 
 // CONFIGURAR EVENT LISTENERS
@@ -48,16 +54,27 @@ function setupEventListeners() {
 }
 
 // CARGAR PRODUCTOS DESDE BACKEND
-async function loadProductsFromBackend() {
+async function loadProductsFromBackend(forceRefresh = false) {
     try {
-        console.log('Cargando productos desde backend...');
+        console.log('Cargando productos desde backend...', forceRefresh ? '(forzando refresh)' : '');
 
         // Create AbortController for timeout
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-        const response = await fetch('/api/get-sheets-data', {
-            signal: controller.signal
+        // Si forceRefresh es true, agregar parámetro para bypass cache y timestamp único
+        const timestamp = Date.now();
+        const url = forceRefresh 
+            ? `/api/get-sheets-data?nocache=1&t=${timestamp}&_=${timestamp}`
+            : `/api/get-sheets-data?t=${timestamp}`;
+
+        const response = await fetch(url, {
+            signal: controller.signal,
+            cache: forceRefresh ? 'no-cache' : 'no-store', // no-store para evitar cache del navegador
+            headers: forceRefresh ? {
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            } : {}
         });
 
         clearTimeout(timeoutId);
@@ -114,6 +131,9 @@ async function loadProductsFromBackend() {
         document.getElementById('loading').style.display = 'none';
         document.getElementById('products-container').style.display = 'grid';
         document.getElementById('cart-button').style.display = 'flex';
+        
+        // Retornar éxito para que el botón de refresh sepa que terminó
+        return Promise.resolve();
 
     } catch (error) {
         console.error('Error cargando productos:', error);
@@ -193,8 +213,31 @@ function renderProducts() {
     const selectedMarca = document.getElementById('filterMarca').value;
     const selectedCategoria = document.getElementById('filterCategoria').value;
 
-    // Filtrar productos
-    let filtered = productos.filter(p => p.activo);
+    // Filtrar productos - solo mostrar productos activos (activo === true)
+    // FILTRO ESTRICTO: solo productos con activo === true explícitamente
+    let filtered = productos.filter(p => {
+      // Verificación estricta: solo true explícito
+      const esActivo = p.activo === true;
+      
+      // Log solo si encontramos productos inactivos (para debugging)
+      if (!esActivo && p.upc && productos.length > 0) {
+        // Solo log los primeros 5 para no saturar la consola
+        const inactivos = productos.filter(prod => prod.activo !== true);
+        if (inactivos.indexOf(p) < 5) {
+          console.warn(`⚠️ Producto inactivo filtrado: ${p.upc} - ${p.nombre} (activo: ${p.activo}, tipo: ${typeof p.activo})`);
+        }
+      }
+      
+      return esActivo;
+    });
+    
+    // Verificación de seguridad: asegurar que no hay productos inactivos
+    const productosInactivosEnFiltrados = filtered.filter(p => p.activo !== true);
+    if (productosInactivosEnFiltrados.length > 0) {
+      console.error(`❌ ERROR CRÍTICO: Se encontraron ${productosInactivosEnFiltrados.length} productos inactivos en filtered!`);
+      // Filtrar nuevamente de forma más agresiva
+      filtered = filtered.filter(p => p.activo === true);
+    }
 
     if (searchTerm) {
         filtered = filtered.filter(p =>
@@ -238,12 +281,16 @@ function renderProductCard(producto) {
     const stockClass = hasStock ? 'in-stock' : 'out-of-stock';
     const stockText = hasStock ? `En stock: ${producto.stock} unidades` : 'Sin stock';
 
-    const imageUrl = producto.imagenURL || 'https://via.placeholder.com/300x250?text=Sin+Imagen';
+    // Usar data URI SVG inline en lugar de placeholder externo para evitar llamadas HTTP
+    const placeholderSvg = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="250"%3E%3Crect fill="%23f5f5f5" width="300" height="250"/%3E%3Ctext fill="%23999" font-family="Arial,sans-serif" font-size="14" x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3ESin Imagen%3C/text%3E%3C/svg%3E';
+    const imageUrl = producto.imagenURL && producto.imagenURL.trim() !== '' 
+        ? producto.imagenURL 
+        : placeholderSvg;
 
     return `
         <div class="product-card" data-upc="${producto.upc}">
-            <img src="${imageUrl}" alt="${producto.nombre}" class="product-image"
-                 onerror="this.src='https://via.placeholder.com/300x250?text=Sin+Imagen'">
+            <img src="${imageUrl}" alt="${producto.nombre}" class="product-image" loading="lazy"
+                 onerror="this.onerror=null; this.src='${placeholderSvg}'">
 
             <div class="product-brand">${producto.marca}</div>
             <div class="product-name">${producto.nombre}</div>
@@ -660,6 +707,11 @@ function processPayment() {
         closeCheckoutModal();
 
         showToast('Pedido enviado a WhatsApp');
+        
+        // Recargar productos para actualizar stock (bypass cache)
+        setTimeout(() => {
+            loadProductsFromBackend(true);
+        }, 1000);
     }
 }
 

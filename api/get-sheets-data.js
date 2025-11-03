@@ -3,17 +3,28 @@
 
 import { google } from 'googleapis';
 
-// In-memory cache (5 minutes TTL)
+// In-memory cache (30 segundos TTL para actualizaciones más frecuentes)
 let cache = null;
 let cacheTimestamp = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 30 * 1000; // 30 segundos
 
 export default async function handler(req, res) {
   // Configurar CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Cache-Control', 'public, max-age=300'); // Cache 5 minutos
+  
+  // Check si se solicita sin cache
+  const skipCache = req.query.nocache === '1' || req.query.nocache === 'true';
+  
+  // Cache-Control header: no-cache si se solicita refresh, o muy corto si no
+  if (skipCache) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  } else {
+    res.setHeader('Cache-Control', 'public, max-age=30'); // Cache 30 segundos
+  }
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -22,14 +33,23 @@ export default async function handler(req, res) {
   try {
     // Check cache first (skip cache if nocache param is present)
     const now = Date.now();
-    const skipCache = req.query.nocache === '1' || req.query.nocache === 'true';
+    
+    // Solo usar cache si NO se solicita refresh y el cache es válido
     if (!skipCache && cache && (now - cacheTimestamp) < CACHE_TTL) {
-      console.log('✅ Returning cached data (age: ' + Math.round((now - cacheTimestamp) / 1000) + 's)');
-      return res.status(200).json({
-        ...cache,
-        cached: true,
-        cacheAge: Math.round((now - cacheTimestamp) / 1000)
-      });
+      // Verificar que el cache también tenga solo productos activos
+      const cacheProductosActivos = (cache.productos || []).filter(p => p.activo === true);
+      if (cacheProductosActivos.length !== (cache.productos || []).length) {
+        console.log('⚠️ Cache contiene productos inactivos, invalidando cache');
+        cache = null; // Invalidar cache si contiene productos inactivos
+      } else {
+        console.log('✅ Returning cached data (age: ' + Math.round((now - cacheTimestamp) / 1000) + 's)');
+        return res.status(200).json({
+          ...cache,
+          productos: cacheProductosActivos, // Asegurar que solo productos activos
+          cached: true,
+          cacheAge: Math.round((now - cacheTimestamp) / 1000)
+        });
+      }
     }
 
     // Validar variables de entorno
@@ -103,7 +123,8 @@ export default async function handler(req, res) {
     const [productosResponse, configResponse] = await Promise.all([
       sheets.spreadsheets.values.get({
         spreadsheetId: SHEET_ID,
-        range: 'Productos!A2:I', // Columnas: UPC, Nombre, Marca, Categoria, Precio_USD_Base, Stock, Imagen_URL, Precio_Mayor_USD, Activo
+        range: 'Productos!A2:I', // Columnas: A=UPC, B=Nombre, C=Marca, D=Categoria, E=Precio_USD_Base, F=Stock, G=Imagen_URL, H=Precio_Mayor_USD, I=Activo
+        valueRenderOption: 'UNFORMATTED_VALUE', // Obtener valores sin formato para booleanos
       }),
       sheets.spreadsheets.values.get({
         spreadsheetId: SHEET_ID,
@@ -117,6 +138,12 @@ export default async function handler(req, res) {
     console.log(`📊 Raw productos count: ${productosRaw.length}`);
     if (productosRaw.length > 0) {
       console.log(`📊 Sample row length: ${productosRaw[0].length}, first row:`, productosRaw[0].slice(0, 10));
+      // Debug: Verificar valores de la columna Activo en las primeras filas
+      console.log(`📊 Valores de columna Activo (índice 8) en primeras 10 filas:`);
+      productosRaw.slice(0, 10).forEach((row, idx) => {
+        const activoRaw = row[8];
+        console.log(`   Fila ${idx + 2}: activoRaw = "${activoRaw}" (tipo: ${typeof activoRaw}, valor: ${JSON.stringify(activoRaw)})`);
+      });
     }
 
     // Transform productos a JSON
@@ -129,15 +156,39 @@ export default async function handler(req, res) {
         // La columna Activo está en índice 8 (columna I)
         const activoRaw = row[8];
         
-        // Si la columna no existe, está vacía, o contiene TRUE (string o boolean), el producto está activo
-        // Si contiene FALSE explícito, entonces está inactivo
-        const esFalso = activoRaw === 'FALSE' || activoRaw === false || 
-                       (typeof activoRaw === 'string' && activoRaw.toUpperCase() === 'FALSE');
-        const activo = !esFalso && (activoRaw === undefined || 
-                      activoRaw === '' || 
-                      activoRaw === 'TRUE' || 
-                      activoRaw === true ||
-                      (typeof activoRaw === 'string' && activoRaw.toUpperCase() === 'TRUE'));
+        // Lógica estricta: solo TRUE (explícito) significa activo
+        // Cualquier otra cosa (FALSE, vacío, undefined) = inactivo
+        let activo = false;
+        
+        // Manejar diferentes formatos que Google Sheets puede devolver
+        // Google Sheets puede devolver: true/false (boolean), "TRUE"/"FALSE" (string), o vacío
+        if (activoRaw !== undefined && activoRaw !== null && activoRaw !== '') {
+          // Convertir a string y normalizar
+          const activoStr = String(activoRaw).toUpperCase().trim();
+          
+          // Verificar si es FALSE explícito primero (para logging)
+          if (activoRaw === false || activoStr === 'FALSE' || activoStr === '0' || activoStr === 'NO') {
+            activo = false;
+            // Debug: Log productos inactivos para verificar
+            if (row[0]) {
+              console.log(`🔍 Producto INACTIVO detectado: ${row[0]} - activoRaw: "${activoRaw}" (tipo: ${typeof activoRaw}) -> activo: false`);
+            }
+          }
+          // Verificar si es TRUE explícito
+          else if (activoRaw === true || activoStr === 'TRUE' || activoStr === '1' || activoStr === 'YES' || activoStr === 'SÍ') {
+            activo = true;
+          }
+          // Cualquier otra cosa = inactivo por defecto
+          else {
+            activo = false;
+            if (row[0]) {
+              console.log(`⚠️ Producto con valor desconocido en Activo: ${row[0]} - activoRaw: "${activoRaw}" (tipo: ${typeof activoRaw}) -> activo: false (por defecto)`);
+            }
+          }
+        } else {
+          // Vacío, undefined o null = inactivo
+          activo = false;
+        }
 
         return {
           upc: row[0] || '',
@@ -156,22 +207,38 @@ export default async function handler(req, res) {
         };
       });
 
-    // Si todos los productos están marcados como inactivos, es probable que el Sheet
-    // todavía tenga las columnas VES y la columna Activo no esté configurada correctamente
-    // En ese caso, consideramos todos los productos como activos por defecto
+    // Debug: Mostrar distribución de productos por estado activo
     const productosActivos = productos.filter(p => p.activo === true);
-    console.log(`📊 Products marked as active: ${productosActivos.length} out of ${productos.length}`);
+    const productosInactivos = productos.filter(p => p.activo !== true);
     
-    // TEMPORAL: Si todos están inactivos, activarlos todos automáticamente
-    // Esto es necesario porque el Sheet puede tener la columna Activo mal configurada
-    const productosFinales = productosActivos.length > 0 
-      ? productosActivos 
-      : productos.map(p => ({ ...p, activo: true }));
-
-    if (productosActivos.length === 0 && productos.length > 0) {
-      console.log('⚠️  All products were marked inactive, treating all as active by default');
+    console.log(`📊 Products analysis:`);
+    console.log(`   Total productos procesados: ${productos.length}`);
+    console.log(`   Activos (activo === true): ${productosActivos.length}`);
+    console.log(`   Inactivos (activo !== true): ${productosInactivos.length}`);
+    
+    // Verificar valores raw de activo en productos inactivos
+    if (productosInactivos.length > 0) {
+      console.log(`   📋 Primeros 10 productos inactivos con detalles:`);
+      productosInactivos.slice(0, 10).forEach(p => {
+        console.log(`      - ${p.upc} - ${p.nombre}`);
+        console.log(`        activo: ${p.activo} (tipo: ${typeof p.activo})`);
+      });
+    } else {
+      console.log(`   ⚠️  PROBLEMA: No se encontraron productos inactivos, pero deberían haber ${productosRaw.length - productosActivos.length} según Google Sheets`);
     }
+    
+    // Filtrar SOLO productos activos (activo === true explícitamente)
+    const productosFinales = productosActivos;
 
+    // Verificación final estricta
+    const productosNoActivosEnFinales = productosFinales.filter(p => p.activo !== true);
+    if (productosNoActivosEnFinales.length > 0) {
+      console.error(`❌ ERROR: Se encontraron ${productosNoActivosEnFinales.length} productos inactivos en productosFinales!`);
+      productosNoActivosEnFinales.forEach(p => {
+        console.error(`   - ${p.upc} - ${p.nombre} (activo: ${p.activo}, tipo: ${typeof p.activo})`);
+      });
+    }
+    
     console.log(`✅ Final products count: ${productosFinales.length}, all activo: ${productosFinales.every(p => p.activo === true)}`);
 
     // Transform config a objeto
@@ -208,10 +275,14 @@ export default async function handler(req, res) {
       cached: false
     };
 
-    // Update cache
-    cache = response;
-    cacheTimestamp = Date.now();
-    console.log('✅ Data cached for 5 minutes');
+    // Update cache solo si no se solicitó skip cache
+    if (!skipCache) {
+      cache = response;
+      cacheTimestamp = Date.now();
+      console.log('✅ Data cached for 30 seconds');
+    } else {
+      console.log('🔄 Cache skipped, fresh data from Google Sheets');
+    }
 
     return res.status(200).json(response);
 
