@@ -138,6 +138,37 @@ h1 {
   background-clip: text;
 }
 
+/* Brand Accent - Destacar PG (Opción 1: Gradiente Dorado Intenso) */
+h1 .brand-accent {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 1.25em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  background: linear-gradient(135deg, #f4d03f 0%, #d4af37 30%, #f4d03f 60%, #ffd700 100%);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  position: relative;
+  margin-left: var(--space-2);
+  text-transform: uppercase;
+  animation: shimmer-intense 2.5s ease-in-out infinite;
+  filter: drop-shadow(0 2px 4px rgba(212, 175, 55, 0.3));
+}
+
+/* Animación shimmer más intensa para PG */
+@keyframes shimmer-intense {
+  0%, 100% {
+    background-position: 0% 50%;
+    filter: drop-shadow(0 2px 4px rgba(212, 175, 55, 0.3));
+  }
+  50% {
+    background-position: 100% 50%;
+    filter: drop-shadow(0 4px 8px rgba(212, 175, 55, 0.5));
+  }
+}
+
 .subtitle {
   font-family: var(--font-accent);
   font-size: var(--text-lg);
