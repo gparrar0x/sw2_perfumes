@@ -52,7 +52,15 @@ async function loadProductsFromBackend() {
     try {
         console.log('Cargando productos desde backend...');
 
-        const response = await fetch('/api/get-sheets-data');
+        // Create AbortController for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+        const response = await fetch('/api/get-sheets-data', {
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
             throw new Error(`Error HTTP: ${response.status}`);
@@ -80,7 +88,19 @@ async function loadProductsFromBackend() {
 
     } catch (error) {
         console.error('Error cargando productos:', error);
-        showError('No se pudo cargar el catálogo. Por favor recarga la página.');
+
+        // Show specific error message
+        let errorMessage = 'No se pudo cargar el catálogo.';
+
+        if (error.name === 'AbortError') {
+            errorMessage = 'El servidor está tardando demasiado. Por favor intenta de nuevo.';
+        } else if (!navigator.onLine) {
+            errorMessage = 'No hay conexión a internet. Verifica tu conexión.';
+        } else if (error.message.includes('HTTP')) {
+            errorMessage = `Error del servidor: ${error.message}`;
+        }
+
+        showError(errorMessage);
     }
 }
 

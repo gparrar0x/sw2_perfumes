@@ -3,6 +3,11 @@
 
 import { google } from 'googleapis';
 
+// In-memory cache (5 minutes TTL)
+let cache = null;
+let cacheTimestamp = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 export default async function handler(req, res) {
   // Configurar CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -15,6 +20,17 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Check cache first
+    const now = Date.now();
+    if (cache && (now - cacheTimestamp) < CACHE_TTL) {
+      console.log('✅ Returning cached data (age: ' + Math.round((now - cacheTimestamp) / 1000) + 's)');
+      return res.status(200).json({
+        ...cache,
+        cached: true,
+        cacheAge: Math.round((now - cacheTimestamp) / 1000)
+      });
+    }
+
     // Validar variables de entorno
     const SHEET_ID = process.env.GOOGLE_SHEET_ID;
     const SERVICE_ACCOUNT_JSON = process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
@@ -81,19 +97,18 @@ export default async function handler(req, res) {
       });
     }
 
-    // Leer productos (A:L incluye precios calculados + Activo)
-    console.log('📖 Reading productos from range: Productos!A2:L');
-    const productosResponse = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: 'Productos!A2:L',
-    });
-
-    // Leer configuración
-    console.log('📖 Reading config from range: Config!A1:B10');
-    const configResponse = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: 'Config!A1:B10',
-    });
+    // Leer productos y config EN PARALELO para reducir tiempo
+    console.log('📖 Reading productos and config in parallel...');
+    const [productosResponse, configResponse] = await Promise.all([
+      sheets.spreadsheets.values.get({
+        spreadsheetId: SHEET_ID,
+        range: 'Productos!A2:L',
+      }),
+      sheets.spreadsheets.values.get({
+        spreadsheetId: SHEET_ID,
+        range: 'Config!A1:B10',
+      })
+    ]);
 
     const productosRaw = productosResponse.data.values || [];
     const configRaw = configResponse.data.values || [];
@@ -131,14 +146,23 @@ export default async function handler(req, res) {
       }
     });
 
-    return res.status(200).json({
+    // Prepare response
+    const response = {
       success: true,
       productos,
       config,
       marcas: [...new Set(productos.map(p => p.marca))].filter(Boolean).sort(),
       categorias: [...new Set(productos.map(p => p.categoria))].filter(Boolean).sort(),
-      lastFetch: new Date().toISOString()
-    });
+      lastFetch: new Date().toISOString(),
+      cached: false
+    };
+
+    // Update cache
+    cache = response;
+    cacheTimestamp = Date.now();
+    console.log('✅ Data cached for 5 minutes');
+
+    return res.status(200).json(response);
 
   } catch (error) {
     console.error('❌ Get sheets data error:', error);
