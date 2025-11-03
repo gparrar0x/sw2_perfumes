@@ -20,9 +20,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Check cache first
+    // Check cache first (skip cache if nocache param is present)
     const now = Date.now();
-    if (cache && (now - cacheTimestamp) < CACHE_TTL) {
+    const skipCache = req.query.nocache === '1' || req.query.nocache === 'true';
+    if (!skipCache && cache && (now - cacheTimestamp) < CACHE_TTL) {
       console.log('✅ Returning cached data (age: ' + Math.round((now - cacheTimestamp) / 1000) + 's)');
       return res.status(200).json({
         ...cache,
@@ -102,7 +103,7 @@ export default async function handler(req, res) {
     const [productosResponse, configResponse] = await Promise.all([
       sheets.spreadsheets.values.get({
         spreadsheetId: SHEET_ID,
-        range: 'Productos!A2:L',
+        range: 'Productos!A2:I', // Columnas: UPC, Nombre, Marca, Categoria, Precio_USD_Base, Stock, Imagen_URL, Precio_Mayor_USD, Activo
       }),
       sheets.spreadsheets.values.get({
         spreadsheetId: SHEET_ID,
@@ -113,30 +114,65 @@ export default async function handler(req, res) {
     const productosRaw = productosResponse.data.values || [];
     const configRaw = configResponse.data.values || [];
 
+    console.log(`📊 Raw productos count: ${productosRaw.length}`);
+    if (productosRaw.length > 0) {
+      console.log(`📊 Sample row length: ${productosRaw[0].length}, first row:`, productosRaw[0].slice(0, 10));
+    }
+
     // Transform productos a JSON
     const productos = productosRaw
       .filter(row => row[0]) // Solo filas con UPC
-      .filter(row => {
-        // Filtrar por columna L (Activo) - si existe y es FALSE, excluir
-        const activo = row[11];
-        return activo === undefined || activo === '' || activo === 'TRUE' || activo === true;
-      })
-      .map(row => ({
-        upc: row[0] || '',
-        nombre: row[1] || '',
-        marca: row[2] || '',
-        categoria: row[3] || '',
-        precioBaseUSD: parseFloat(row[4]) || 0,
-        stock: parseInt(row[5]) || 0,
-        imagenURL: row[6] || '', // Cambiado de imagen a imagenURL para consistencia con frontend
-        // Precios calculados por fórmulas de Google Sheets
-        precioMayorUSD: parseFloat(row[7]) || 0,
-        precioDetalUSD: parseFloat(row[8]) || 0,
-        precioMayorVES: parseFloat(row[9]) || 0,
-        precioDetalVES: parseFloat(row[10]) || 0,
-        activo: row[11] === 'TRUE' || row[11] === true,
-        disponible: parseInt(row[5]) > 0 // Disponible si hay stock
-      }));
+      .map(row => {
+        // Estructura del Sheet:
+        // A: UPC, B: Nombre, C: Marca, D: Categoria, E: Precio_USD_Base, F: Stock, G: Imagen_URL, H: Precio_Mayor_USD, I: Activo
+        
+        // La columna Activo está en índice 8 (columna I)
+        const activoRaw = row[8];
+        
+        // Si la columna no existe, está vacía, o contiene TRUE (string o boolean), el producto está activo
+        // Si contiene FALSE explícito, entonces está inactivo
+        const esFalso = activoRaw === 'FALSE' || activoRaw === false || 
+                       (typeof activoRaw === 'string' && activoRaw.toUpperCase() === 'FALSE');
+        const activo = !esFalso && (activoRaw === undefined || 
+                      activoRaw === '' || 
+                      activoRaw === 'TRUE' || 
+                      activoRaw === true ||
+                      (typeof activoRaw === 'string' && activoRaw.toUpperCase() === 'TRUE'));
+
+        return {
+          upc: row[0] || '',
+          nombre: row[1] || '',
+          marca: row[2] || '',
+          categoria: row[3] || '',
+          precioBaseUSD: parseFloat(row[4]) || 0,
+          stock: parseInt(row[5]) || 0,
+          imagenURL: row[6] || '',
+          // Solo existe Precio_Mayor_USD en columna H (índice 7)
+          precioMayorUSD: parseFloat(row[7]) || 0,
+          // No hay Precio_Detal_USD, usar el mismo precio mayorista
+          precioDetalUSD: parseFloat(row[7]) || 0,
+          activo: activo,
+          disponible: parseInt(row[5]) > 0
+        };
+      });
+
+    // Si todos los productos están marcados como inactivos, es probable que el Sheet
+    // todavía tenga las columnas VES y la columna Activo no esté configurada correctamente
+    // En ese caso, consideramos todos los productos como activos por defecto
+    const productosActivos = productos.filter(p => p.activo === true);
+    console.log(`📊 Products marked as active: ${productosActivos.length} out of ${productos.length}`);
+    
+    // TEMPORAL: Si todos están inactivos, activarlos todos automáticamente
+    // Esto es necesario porque el Sheet puede tener la columna Activo mal configurada
+    const productosFinales = productosActivos.length > 0 
+      ? productosActivos 
+      : productos.map(p => ({ ...p, activo: true }));
+
+    if (productosActivos.length === 0 && productos.length > 0) {
+      console.log('⚠️  All products were marked inactive, treating all as active by default');
+    }
+
+    console.log(`✅ Final products count: ${productosFinales.length}, all activo: ${productosFinales.every(p => p.activo === true)}`);
 
     // Transform config a objeto
     const config = {};
@@ -146,13 +182,28 @@ export default async function handler(req, res) {
       }
     });
 
+    // Validar que tenemos productos antes de enviar respuesta
+    if (!productosFinales || productosFinales.length === 0) {
+      console.warn('⚠️ No hay productos finales para enviar');
+      return res.status(200).json({
+        success: true,
+        productos: [],
+        config: {},
+        marcas: [],
+        categorias: [],
+        lastFetch: new Date().toISOString(),
+        cached: false,
+        warning: 'No products found in sheet'
+      });
+    }
+
     // Prepare response
     const response = {
       success: true,
-      productos,
+      productos: productosFinales,
       config,
-      marcas: [...new Set(productos.map(p => p.marca))].filter(Boolean).sort(),
-      categorias: [...new Set(productos.map(p => p.categoria))].filter(Boolean).sort(),
+      marcas: [...new Set(productosFinales.map(p => p.marca))].filter(Boolean).sort(),
+      categorias: [...new Set(productosFinales.map(p => p.categoria))].filter(Boolean).sort(),
       lastFetch: new Date().toISOString(),
       cached: false
     };

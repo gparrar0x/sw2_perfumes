@@ -63,17 +63,46 @@ async function loadProductsFromBackend() {
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-            throw new Error(`Error HTTP: ${response.status}`);
+            const errorData = await response.json().catch(() => ({}));
+            console.error('Error de respuesta:', {
+                status: response.status,
+                statusText: response.statusText,
+                error: errorData
+            });
+            throw new Error(`Error HTTP: ${response.status} - ${errorData.error || response.statusText}`);
         }
 
         const data = await response.json();
         console.log('Datos recibidos:', data);
+        console.log('Estructura de datos:', {
+            tieneProductos: Array.isArray(data.productos),
+            cantidadProductos: data.productos?.length || 0,
+            tieneConfig: !!data.config,
+            success: data.success
+        });
 
         productos = data.productos || [];
         config = data.config || {};
 
         console.log(`Productos cargados: ${productos.length}`);
         console.log('Configuración:', config);
+        
+        // Validar que tenemos productos
+        if (!Array.isArray(productos) || productos.length === 0) {
+            console.warn('⚠️ No se recibieron productos o el array está vacío');
+            showError('No se encontraron productos disponibles. Por favor contacta al administrador.');
+            return;
+        }
+        
+        // Verificar productos activos
+        const productosActivos = productos.filter(p => p.activo !== false);
+        console.log(`Productos activos: ${productosActivos.length} de ${productos.length}`);
+        
+        if (productosActivos.length === 0) {
+            console.warn('⚠️ Todos los productos están marcados como inactivos');
+            showError('No hay productos disponibles en este momento.');
+            return;
+        }
 
         // Llenar filtros
         populateFilters();
@@ -88,19 +117,35 @@ async function loadProductsFromBackend() {
 
     } catch (error) {
         console.error('Error cargando productos:', error);
+        console.error('Error completo:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack
+        });
 
         // Show specific error message
         let errorMessage = 'No se pudo cargar el catálogo.';
+        let errorDetails = '';
 
         if (error.name === 'AbortError') {
-            errorMessage = 'El servidor está tardando demasiado. Por favor intenta de nuevo.';
+            errorMessage = 'El servidor está tardando demasiado.';
+            errorDetails = 'Por favor intenta de nuevo o verifica tu conexión.';
         } else if (!navigator.onLine) {
-            errorMessage = 'No hay conexión a internet. Verifica tu conexión.';
+            errorMessage = 'No hay conexión a internet.';
+            errorDetails = 'Verifica tu conexión y recarga la página.';
         } else if (error.message.includes('HTTP')) {
-            errorMessage = `Error del servidor: ${error.message}`;
+            errorMessage = 'Error del servidor';
+            errorDetails = error.message;
+            
+            // Si es un error 500, sugerir verificar configuración
+            if (error.message.includes('500')) {
+                errorDetails += '\n\nPosibles causas:\n- Variables de entorno no configuradas\n- Service Account sin acceso al Sheet\n- Error en Google Sheets API';
+            }
+        } else {
+            errorDetails = error.message || 'Error desconocido';
         }
 
-        showError(errorMessage);
+        showError(errorMessage, errorDetails);
     }
 }
 
@@ -752,15 +797,44 @@ async function processPaymentMercadoPago() {
    ============================================ */
 
 // MOSTRAR ERROR
-function showError(message) {
+function showError(message, details = '') {
     const loading = document.getElementById('loading');
     loading.innerHTML = `
-        <h3>Error</h3>
-        <p>${message}</p>
-        <button class="btn btn-primary" onclick="location.reload()">
-            Reintentar
-        </button>
+        <div style="text-align: center; padding: 2rem;">
+            <h3 style="color: var(--error, #ef4444); margin-bottom: 1rem;">${message}</h3>
+            ${details ? `<p style="color: var(--charcoal, #4a5568); margin-bottom: 1.5rem; white-space: pre-line; font-size: 0.9rem;">${details}</p>` : ''}
+            <button class="btn btn-primary" onclick="location.reload()" style="margin-right: 1rem;">
+                Reintentar
+            </button>
+            <button class="btn" onclick="checkHealth()" style="background: transparent; border: 1px solid var(--gold, #d4af37); color: var(--gold, #d4af37);">
+                Verificar Estado
+            </button>
+        </div>
     `;
+}
+
+// Función para verificar el estado del servidor
+async function checkHealth() {
+    try {
+        const response = await fetch('/api/health-check');
+        const data = await response.json();
+        
+        console.log('Health check:', data);
+        
+        let healthMessage = 'Estado del sistema:\n\n';
+        healthMessage += `Variables de entorno: ${data.summary.envVarsConfigured ? '✓' : '✗'}\n`;
+        healthMessage += `Credenciales válidas: ${data.summary.credentialsValid ? '✓' : '✗'}\n`;
+        healthMessage += `Acceso al Sheet: ${data.summary.sheetAccessible ? '✓' : '✗'}\n`;
+        
+        if (!data.summary.sheetAccessible && data.checks.sheetAccess?.error) {
+            healthMessage += `\nError: ${data.checks.sheetAccess.error}`;
+        }
+        
+        alert(healthMessage);
+    } catch (error) {
+        console.error('Error en health check:', error);
+        alert('No se pudo verificar el estado del servidor.');
+    }
 }
 
 // MOSTRAR TOAST (NOTIFICACIÓN)
