@@ -468,21 +468,6 @@ function processPayment() {
     const tipoEntrega = document.querySelector('input[name="delivery-type"]:checked')?.value || 'envio';
     const { subtotal, envio, total, envioGratis } = calcularTotales(tipoEntrega);
 
-    // Construir mensaje de WhatsApp
-    let mensaje = `✨ *¡NUEVO PEDIDO DE PERFUMES!* ✨\n`;
-    mensaje += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
-
-    mensaje += `👤 *DATOS DEL CLIENTE*\n`;
-    mensaje += `• Nombre: ${name}\n`;
-    if (email) {
-        mensaje += `• Email: ${email}\n`;
-    }
-    mensaje += `• Tipo de entrega: ${tipoEntrega === 'pickup' ? '🏪 Recoger en tienda (Pickup)' : '🚚 Envío a domicilio'}\n`;
-    mensaje += `\n`;
-
-    mensaje += `━━━━━━━━━━━━━━━━━━━━━\n`;
-    mensaje += `🎁 *PRODUCTOS SOLICITADOS*\n\n`;
-
     // Agrupar productos por UPC y modoVenta para consolidar duplicados
     const productosAgrupados = {};
     carrito.forEach(item => {
@@ -491,6 +476,7 @@ function processPayment() {
             productosAgrupados[key].cantidad += item.cantidad;
         } else {
             productosAgrupados[key] = {
+                upc: item.upc,
                 marca: item.marca,
                 nombre: item.nombre,
                 cantidad: item.cantidad,
@@ -500,51 +486,136 @@ function processPayment() {
         }
     });
 
-    // Renderizar items agrupados en el mensaje
+    // Construir mensaje de WhatsApp (sin emojis, estructura reorganizada)
+    let mensaje = `Me gustaría hacer el siguiente pedido:\n\n`;
+
+    // DATOS DEL CLIENTE
+    mensaje += `*Mis Datos:*\n`;
+    mensaje += `Nombre: ${name}\n`;
+    if (email) {
+        mensaje += `Email: ${email}\n`;
+    }
+    mensaje += `Tipo de entrega: ${tipoEntrega === 'pickup' ? 'Recoger en tienda (Pickup)' : 'Envío a domicilio'}\n`;
+    mensaje += `\n`;
+
+    // RESUMEN DE PAGO
+    mensaje += `*RESUMEN DE PAGO*\n`;
+    mensaje += `Subtotal: $${formatPrice(subtotal)}\n`;
+    if (tipoEntrega === 'pickup') {
+        mensaje += `Recoger en tienda: Sin costo adicional\n`;
+    } else {
+        if (envioGratis) {
+            mensaje += `Envío: GRATIS (pedido mayor a $500)\n`;
+        } else {
+            mensaje += `Envío: $${formatPrice(envio)}\n`;
+        }
+    }
+    mensaje += `TOTAL A PAGAR: $${formatPrice(total)}\n`;
+    mensaje += `\n`;
+
+    // PRODUCTOS SOLICITADOS
+    mensaje += `*PRODUCTOS SOLICITADOS*\n\n`;
     let index = 1;
     Object.values(productosAgrupados).forEach(item => {
-        mensaje += `${index}️⃣ *${item.marca}*\n`;
-        mensaje += `   ${item.nombre}\n`;
-        mensaje += `   Cant: ${item.cantidad} unid.\n`;
-        mensaje += `   💵 $${formatPrice(item.precio)} c/u → *$${formatPrice(item.precio * item.cantidad)}*\n\n`;
+        mensaje += `${index}. ${item.marca} - ${item.nombre}\n`;
+        mensaje += `   Cantidad: ${item.cantidad} unidad${item.cantidad > 1 ? 'es' : ''}\n`;
+        mensaje += `   Precio unitario: $${formatPrice(item.precio)}\n`;
+        mensaje += `   Subtotal: $${formatPrice(item.precio * item.cantidad)}\n\n`;
         index++;
     });
 
-    mensaje += `━━━━━━━━━━━━━━━━━━━━━\n`;
-    mensaje += `💰 *RESUMEN DE PAGO*\n\n`;
-    mensaje += `Subtotal: $${formatPrice(subtotal)}\n`;
-    if (tipoEntrega === 'pickup') {
-        mensaje += `🏪 Recoger en tienda: Sin costo adicional\n`;
-    } else {
-        if (envioGratis) {
-            mensaje += `🚚 Envío: GRATIS (pedido mayor a $500)\n`;
-        } else {
-            mensaje += `🚚 Envío: $${formatPrice(envio)}\n`;
-        }
-    }
-    mensaje += `━━━━━━━━━━━━━━━━━━━━━\n`;
-    mensaje += `✅ *TOTAL A PAGAR: $${formatPrice(total)}*\n`;
-    mensaje += `━━━━━━━━━━━━━━━━━━━━━\n`;
-
+    // Notas adicionales
     if (notes) {
-        mensaje += `\n📝 *Notas adicionales:*\n${notes}\n`;
+        mensaje += `*Notas adicionales:*\n${notes}\n`;
     }
 
-    mensaje += `\n¡Gracias por tu pedido! 🙏✨`;
+    // Generar ID único del pedido (formato: PERF-YYYYMMDD-XXX)
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+    const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const orderId = `PERF-${dateStr}-${randomSuffix}`;
 
-    // Codificar mensaje para URL
-    const mensajeCodificado = encodeURIComponent(mensaje);
-    const whatsappURL = `https://wa.me/${WHATSAPP_NUMBER}?text=${mensajeCodificado}`;
+    // Preparar items para guardar (usar productos agrupados)
+    const itemsToSave = Object.values(productosAgrupados).map(item => ({
+        upc: item.upc,
+        nombre: item.nombre,
+        marca: item.marca,
+        cantidad: item.cantidad,
+        precio: item.precio,
+        modoVenta: item.modoVenta
+    }));
 
-    // Abrir WhatsApp
-    window.open(whatsappURL, '_blank');
+    // Preparar datos del pedido para guardar
+    const orderData = {
+        orderId: orderId,
+        customer: {
+            name: name,
+            email: email || '',
+            notes: notes || '',
+            tipoEntrega: tipoEntrega
+        },
+        items: itemsToSave,
+        total: total,
+        subtotal: subtotal,
+        envio: envio,
+        paymentId: '', // WhatsApp no tiene paymentId
+        paymentMethod: 'whatsapp'
+    };
 
-    // Limpiar carrito y cerrar modal
-    carrito = [];
-    updateCartUI();
-    closeCheckoutModal();
+    // Guardar pedido en Google Sheets
+    fetch('/api/save-order', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(orderData)
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().catch(() => ({}));
+        }
+        return response.json();
+    })
+    .then(result => {
+        if (result.success) {
+            console.log('Pedido guardado:', result);
+            // Agregar orderId al mensaje de WhatsApp
+            mensaje += `\n*ID del Pedido: ${orderId}*`;
+        } else {
+            console.error('Error guardando pedido:', result);
+        }
+        
+        // Enviar a WhatsApp después de intentar guardar
+        enviarAWhatsApp(mensaje);
+    })
+    .catch(error => {
+        console.error('Error al guardar pedido:', error);
+        // Continuar con WhatsApp aunque falle el guardado
+        enviarAWhatsApp(mensaje);
+    });
 
-    showToast('Pedido enviado a WhatsApp ✅');
+    // Función auxiliar para enviar a WhatsApp
+    function enviarAWhatsApp(mensajeFinal) {
+        // Mostrar mensaje en consola para debugging
+        console.log('Mensaje de WhatsApp que se enviará:');
+        console.log('━━━━━━━━━━━━━━━━━━━━━');
+        console.log(mensajeFinal);
+        console.log('━━━━━━━━━━━━━━━━━━━━━');
+
+        // Codificar mensaje para URL
+        const mensajeCodificado = encodeURIComponent(mensajeFinal);
+        const whatsappURL = `https://wa.me/${WHATSAPP_NUMBER}?text=${mensajeCodificado}`;
+
+        // Abrir WhatsApp
+        window.open(whatsappURL, '_blank');
+
+        // Limpiar carrito y cerrar modal
+        carrito = [];
+        updateCartUI();
+        closeCheckoutModal();
+
+        showToast('Pedido enviado a WhatsApp');
+    }
 }
 
 /* ============================================
