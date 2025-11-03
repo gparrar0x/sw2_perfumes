@@ -7,7 +7,7 @@ const WHATSAPP_NUMBER = '584140161454'; // Número de WhatsApp (código país + 
 // VARIABLES GLOBALES
 let productos = [];
 let carrito = [];
-let modoVenta = 'detal'; // 'detal' o 'mayor'
+let modoVenta = 'precio'; // Modo de venta (por compatibilidad)
 let config = {};
 
 // INICIALIZAR APLICACION
@@ -185,9 +185,9 @@ function renderProducts() {
 
 // RENDERIZAR TARJETA DE PRODUCTO
 function renderProductCard(producto) {
-    const precio = modoVenta === 'mayor' ? producto.precioMayorVES : producto.precioDetalVES;
-    const precioUSD = modoVenta === 'mayor' ? producto.precioMayorUSD : producto.precioDetalUSD;
-    const tipoLabel = modoVenta === 'mayor' ? 'Mayorista' : 'Minorista';
+    // Solo tenemos Precio_Mayor_USD, usar siempre ese precio
+    const precio = producto.precioMayorUSD || 0;
+    const tipoLabel = 'Precio';
 
     const hasStock = producto.stock > 0;
     const stockClass = hasStock ? 'in-stock' : 'out-of-stock';
@@ -206,12 +206,8 @@ function renderProductCard(producto) {
 
             <div class="product-prices">
                 <div class="price-row">
-                    <span class="price-label">${tipoLabel} (VES):</span>
-                    <span class="price-value highlight">Bs. ${formatPrice(precio)}</span>
-                </div>
-                <div class="price-row">
-                    <span class="price-label">${tipoLabel} (USD):</span>
-                    <span class="price-value">$${formatPrice(precioUSD)}</span>
+                    <span class="price-label">${tipoLabel}:</span>
+                    <span class="price-value highlight">$${formatPrice(precio)}</span>
                 </div>
             </div>
 
@@ -231,7 +227,7 @@ function renderProductCard(producto) {
 // FORMATEAR PRECIO
 function formatPrice(price) {
     if (!price) return '0.00';
-    return parseFloat(price).toLocaleString('es-VE', {
+    return parseFloat(price).toLocaleString('en-US', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     });
@@ -247,25 +243,34 @@ function addToCart(upc) {
     }
 
     if (producto.stock <= 0) {
-        alert('Este producto no tiene stock disponible');
+        showToastError('Este producto no tiene stock disponible');
+        return;
+    }
+
+    // Calcular cantidad total que ya está en el carrito (sumar todos los items con mismo UPC)
+    const cantidadEnCarrito = carrito
+        .filter(item => item.upc === upc)
+        .reduce((sum, item) => sum + item.cantidad, 0);
+
+    // Verificar que al agregar 1 más no exceda el stock disponible
+    if (cantidadEnCarrito + 1 > producto.stock) {
+        const unidadesDisponibles = producto.stock - cantidadEnCarrito;
+        if (unidadesDisponibles <= 0) {
+            showToastError(`Ya tienes todas las unidades disponibles de este producto en el carrito`);
+        } else {
+            showToastError(`Solo puedes agregar ${unidadesDisponibles} unidad${unidadesDisponibles > 1 ? 'es' : ''} más. Ya tienes ${cantidadEnCarrito} en el carrito`);
+        }
         return;
     }
 
     // Buscar si ya existe en el carrito
-    const itemExistente = carrito.find(item => item.upc === upc && item.modoVenta === modoVenta);
+    const itemExistente = carrito.find(item => item.upc === upc);
 
     if (itemExistente) {
-        // Verificar que no exceda el stock disponible
-        const cantidadTotalEnCarrito = itemExistente.cantidad + 1;
-
-        if (cantidadTotalEnCarrito > producto.stock) {
-            alert(`Solo hay ${producto.stock} unidades disponibles de este producto`);
-            return;
-        }
-
         itemExistente.cantidad++;
     } else {
-        const precio = modoVenta === 'mayor' ? producto.precioMayorVES : producto.precioDetalVES;
+        // Solo tenemos Precio_Mayor_USD, usar siempre ese precio
+        const precio = producto.precioMayorUSD || 0;
 
         carrito.push({
             upc: producto.upc,
@@ -273,7 +278,7 @@ function addToCart(upc) {
             marca: producto.marca,
             precio: precio,
             cantidad: 1,
-            modoVenta: modoVenta,
+            modoVenta: 'precio',
             stockDisponible: producto.stock // Guardar stock para referencia
         });
     }
@@ -304,16 +309,22 @@ function updateCartUI() {
     cartButton.style.display = totalItems > 0 ? 'flex' : 'none';
 }
 
-// CALCULAR TOTALES (SUBTOTAL + FLETE)
-function calcularTotales() {
+// CALCULAR TOTALES (SUBTOTAL + ENVÍO)
+function calcularTotales(tipoEntrega = 'envio') {
     const subtotal = carrito.reduce((sum, item) => {
         return sum + (item.precio * item.cantidad);
     }, 0);
 
-    const flete = subtotal * 0.10; // 10% del subtotal
-    const total = subtotal + flete;
+    // Si es pickup, no hay costo de envío
+    let envio = 0;
+    if (tipoEntrega === 'envio') {
+        // Si el pedido es más de $500, envío gratis. Si no, $3
+        envio = subtotal >= 500 ? 0 : 3;
+    }
+    
+    const total = subtotal + envio;
 
-    return { subtotal, flete, total };
+    return { subtotal, envio, total, envioGratis: tipoEntrega === 'envio' && subtotal >= 500, tipoEntrega };
 }
 
 // ABRIR MODAL DE CHECKOUT
@@ -326,17 +337,57 @@ function openCheckoutModal() {
     const modal = document.getElementById('checkout-modal');
     const orderSummary = document.getElementById('order-summary');
 
-    const { subtotal, flete, total } = calcularTotales();
+    // Obtener tipo de entrega seleccionado (por defecto 'envio')
+    const tipoEntrega = document.querySelector('input[name="delivery-type"]:checked')?.value || 'envio';
+    const { subtotal, envio, total, envioGratis } = calcularTotales(tipoEntrega);
+    
+    // Función para actualizar el resumen cuando cambie el tipo de entrega
+    const updateSummary = () => {
+        const selectedTipoEntrega = document.querySelector('input[name="delivery-type"]:checked')?.value || 'envio';
+        const totals = calcularTotales(selectedTipoEntrega);
+        renderOrderSummary(totals);
+    };
+
+    // Agregar listener a los radio buttons
+    document.querySelectorAll('input[name="delivery-type"]').forEach(radio => {
+        radio.removeEventListener('change', updateSummary); // Remover listener previo si existe
+        radio.addEventListener('change', updateSummary);
+    });
+
+    renderOrderSummary({ subtotal, envio, total, envioGratis, tipoEntrega });
+    
+    modal.style.display = 'block';
+}
+
+// RENDERIZAR RESUMEN DEL PEDIDO
+function renderOrderSummary({ subtotal, envio, total, envioGratis, tipoEntrega }) {
+    const orderSummary = document.getElementById('order-summary');
 
     let summaryHTML = '<h3>Resumen del Pedido</h3>';
 
-    // Items del carrito
+    // Agrupar productos por UPC y modoVenta para consolidar duplicados
+    const productosAgrupados = {};
     carrito.forEach(item => {
+        const key = `${item.upc}_${item.modoVenta}`;
+        if (productosAgrupados[key]) {
+            productosAgrupados[key].cantidad += item.cantidad;
+        } else {
+            productosAgrupados[key] = {
+                nombre: item.nombre,
+                cantidad: item.cantidad,
+                precio: item.precio,
+                modoVenta: item.modoVenta
+            };
+        }
+    });
+
+    // Renderizar items agrupados
+    Object.values(productosAgrupados).forEach(item => {
         const itemTotal = item.precio * item.cantidad;
         summaryHTML += `
             <div class="summary-item">
-                <span>${item.nombre} (x${item.cantidad}) - ${item.modoVenta === 'mayor' ? 'Mayorista' : 'Minorista'}</span>
-                <span>Bs. ${formatPrice(itemTotal)}</span>
+                <span>${item.nombre} (x${item.cantidad})</span>
+                <span>$${formatPrice(itemTotal)}</span>
             </div>
         `;
     });
@@ -345,28 +396,46 @@ function openCheckoutModal() {
     summaryHTML += `
         <div class="summary-item">
             <span>Subtotal:</span>
-            <span>Bs. ${formatPrice(subtotal)}</span>
+            <span>$${formatPrice(subtotal)}</span>
         </div>
     `;
 
-    // Flete
-    summaryHTML += `
-        <div class="summary-item">
-            <span>Flete (10%):</span>
-            <span>Bs. ${formatPrice(flete)}</span>
-        </div>
-    `;
+    // Envío o Pickup
+    if (tipoEntrega === 'pickup') {
+        summaryHTML += `
+            <div class="summary-item">
+                <span>Tipo de entrega:</span>
+                <span>🏪 Recoger en tienda</span>
+            </div>
+        `;
+    } else {
+        if (envioGratis) {
+            summaryHTML += `
+                <div class="summary-item">
+                    <span>Envío:</span>
+                    <span class="envio-tachado">$${formatPrice(3)}</span>
+                    <span class="envio-gratis">GRATIS</span>
+                </div>
+            `;
+        } else {
+            summaryHTML += `
+                <div class="summary-item">
+                    <span>Envío:</span>
+                    <span>$${formatPrice(envio)}</span>
+                </div>
+            `;
+        }
+    }
 
     // Total
     summaryHTML += `
         <div class="summary-item summary-total">
             <span>TOTAL A PAGAR:</span>
-            <span>Bs. ${formatPrice(total)}</span>
+            <span>$${formatPrice(total)}</span>
         </div>
     `;
 
     orderSummary.innerHTML = summaryHTML;
-    modal.style.display = 'block';
 }
 
 // CERRAR MODAL DE CHECKOUT
@@ -395,7 +464,9 @@ function processPayment() {
         return;
     }
 
-    const { subtotal, flete, total } = calcularTotales();
+    // Obtener tipo de entrega seleccionado
+    const tipoEntrega = document.querySelector('input[name="delivery-type"]:checked')?.value || 'envio';
+    const { subtotal, envio, total, envioGratis } = calcularTotales(tipoEntrega);
 
     // Construir mensaje de WhatsApp
     let mensaje = `✨ *¡NUEVO PEDIDO DE PERFUMES!* ✨\n`;
@@ -406,25 +477,53 @@ function processPayment() {
     if (email) {
         mensaje += `• Email: ${email}\n`;
     }
+    mensaje += `• Tipo de entrega: ${tipoEntrega === 'pickup' ? '🏪 Recoger en tienda (Pickup)' : '🚚 Envío a domicilio'}\n`;
     mensaje += `\n`;
 
     mensaje += `━━━━━━━━━━━━━━━━━━━━━\n`;
     mensaje += `🎁 *PRODUCTOS SOLICITADOS*\n\n`;
 
-    carrito.forEach((item, index) => {
-        const tipoVenta = item.modoVenta === 'mayor' ? '📦 Mayorista' : '🛍️ Minorista';
-        mensaje += `${index + 1}️⃣ *${item.marca}*\n`;
+    // Agrupar productos por UPC y modoVenta para consolidar duplicados
+    const productosAgrupados = {};
+    carrito.forEach(item => {
+        const key = `${item.upc}_${item.modoVenta}`;
+        if (productosAgrupados[key]) {
+            productosAgrupados[key].cantidad += item.cantidad;
+        } else {
+            productosAgrupados[key] = {
+                marca: item.marca,
+                nombre: item.nombre,
+                cantidad: item.cantidad,
+                precio: item.precio,
+                modoVenta: item.modoVenta
+            };
+        }
+    });
+
+    // Renderizar items agrupados en el mensaje
+    let index = 1;
+    Object.values(productosAgrupados).forEach(item => {
+        mensaje += `${index}️⃣ *${item.marca}*\n`;
         mensaje += `   ${item.nombre}\n`;
-        mensaje += `   ${tipoVenta} | Cant: ${item.cantidad} unid.\n`;
-        mensaje += `   💵 Bs. ${formatPrice(item.precio)} c/u → *Bs. ${formatPrice(item.precio * item.cantidad)}*\n\n`;
+        mensaje += `   Cant: ${item.cantidad} unid.\n`;
+        mensaje += `   💵 $${formatPrice(item.precio)} c/u → *$${formatPrice(item.precio * item.cantidad)}*\n\n`;
+        index++;
     });
 
     mensaje += `━━━━━━━━━━━━━━━━━━━━━\n`;
     mensaje += `💰 *RESUMEN DE PAGO*\n\n`;
-    mensaje += `Subtotal: Bs. ${formatPrice(subtotal)}\n`;
-    mensaje += `🚚 Envío (10%): Bs. ${formatPrice(flete)}\n`;
+    mensaje += `Subtotal: $${formatPrice(subtotal)}\n`;
+    if (tipoEntrega === 'pickup') {
+        mensaje += `🏪 Recoger en tienda: Sin costo adicional\n`;
+    } else {
+        if (envioGratis) {
+            mensaje += `🚚 Envío: GRATIS (pedido mayor a $500)\n`;
+        } else {
+            mensaje += `🚚 Envío: $${formatPrice(envio)}\n`;
+        }
+    }
     mensaje += `━━━━━━━━━━━━━━━━━━━━━\n`;
-    mensaje += `✅ *TOTAL A PAGAR: Bs. ${formatPrice(total)}*\n`;
+    mensaje += `✅ *TOTAL A PAGAR: $${formatPrice(total)}*\n`;
     mensaje += `━━━━━━━━━━━━━━━━━━━━━\n`;
 
     if (notes) {
@@ -492,11 +591,11 @@ async function processPaymentMercadoPago() {
         // Preparar items para MercadoPago
         const items = carrito.map(item => ({
             id: item.upc,
-            title: `${item.nombre} (${item.modoVenta === 'mayor' ? 'Mayorista' : 'Minorista'})`,
+            title: `${item.nombre}`,
             description: `${item.marca} - ${item.nombre}`,
             quantity: item.cantidad,
             unit_price: item.precio,
-            currency_id: 'VES' // Bolívares venezolanos
+            currency_id: 'USD' // Dólares estadounidenses
         }));
 
         // Agregar flete como item separado
@@ -506,7 +605,7 @@ async function processPaymentMercadoPago() {
             description: 'Costo de envío',
             quantity: 1,
             unit_price: flete,
-            currency_id: 'VES'
+            currency_id: 'USD'
         });
 
         // Preparar datos del pedido
@@ -633,4 +732,46 @@ function showToast(message) {
             setTimeout(() => toast.remove(), 300);
         }
     }, 3000);
+}
+
+// MOSTRAR TOAST DE ERROR (NOTIFICACIÓN ROJA)
+function showToastError(message) {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #dc2626;
+        color: white;
+        padding: 15px 25px;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(220, 38, 38, 0.3);
+        z-index: 10000;
+        font-weight: 600;
+        animation: slideIn 0.3s ease;
+    `;
+
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    // Agregar animación CSS si no existe
+    if (!document.getElementById('toast-styles')) {
+        const style = document.createElement('style');
+        style.id = 'toast-styles';
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // Remover después de 4 segundos (un poco más largo para errores)
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.style.animation = 'slideIn 0.3s ease reverse';
+            setTimeout(() => toast.remove(), 300);
+        }
+    }, 4000);
 }

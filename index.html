@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Catálogo de Perfumes Premium</title>
-    <meta name="description" content="Perfumes de las mejores marcas al mejor precio. Precios especiales para mayoristas y minoristas.">
+    <title>Catálogo de Perfumes</title>
+    <meta name="description" content="Perfumes de las mejores marcas al mejor precio.">
     <!-- Google Fonts - Tipografía Premium -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,18 +18,13 @@
     <div class="container">
         <header>
             <h1>Catálogo de Perfumes Premium</h1>
-            <p class="subtitle">Las mejores fragancias a precios especiales</p>
         </header>
 
-        <!-- Toggle Mayorista/Minorista -->
-        <div class="mode-toggle">
+        <!-- Toggle oculto (ya no se usa) -->
+        <div class="mode-toggle" style="display: none;">
             <label>
-                <input type="radio" name="saleMode" value="detal" checked>
-                <span>Minorista (Precio Detal)</span>
-            </label>
-            <label>
-                <input type="radio" name="saleMode" value="mayor">
-                <span>Mayorista (Precio Mayor)</span>
+                <input type="radio" name="saleMode" value="precio" checked>
+                <span>Precio</span>
             </label>
         </div>
 
@@ -80,7 +75,7 @@
             <span class="cart-badge" id="cart-count" style="display: none;">0</span>
         </span>
         <div class="cart-info">
-            <div class="cart-total">Bs. <span id="cart-total">0.00</span></div>
+            <div class="cart-total">$<span id="cart-total">0.00</span></div>
         </div>
     </div>
 
@@ -88,10 +83,6 @@
     <div class="modal" id="checkout-modal">
         <div class="modal-content">
             <h2>Completar Pedido</h2>
-
-            <div class="order-summary" id="order-summary">
-                <!-- Se llenará dinámicamente -->
-            </div>
 
             <form id="checkout-form">
                 <div class="form-group">
@@ -105,10 +96,28 @@
                 </div>
 
                 <div class="form-group">
+                    <label>Tipo de entrega *</label>
+                    <div class="delivery-options">
+                        <label class="delivery-option">
+                            <input type="radio" name="delivery-type" value="envio" checked>
+                            <span>🚚 Envío a domicilio</span>
+                        </label>
+                        <label class="delivery-option">
+                            <input type="radio" name="delivery-type" value="pickup">
+                            <span>🏪 Recoger en tienda (Pickup)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
                     <label for="customer-notes">Notas adicionales (opcional)</label>
                     <textarea id="customer-notes" placeholder="Comentarios especiales, preferencias de entrega..." rows="3"></textarea>
                 </div>
             </form>
+
+            <div class="order-summary" id="order-summary">
+                <!-- Se llenará dinámicamente -->
+            </div>
 
             <div class="modal-buttons">
                 <button class="btn-secondary" onclick="closeCheckoutModal()">Cancelar</button>

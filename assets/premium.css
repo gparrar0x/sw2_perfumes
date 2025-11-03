@@ -148,7 +148,7 @@ h1 {
 }
 
 /* ========================================
-   MODE TOGGLE (Mayorista/Minorista)
+   MODE TOGGLE (Oculto)
    ======================================== */
 .mode-toggle {
   display: inline-flex;
@@ -392,8 +392,10 @@ select {
 }
 
 .product-stock.in-stock {
-  background: #d1fae5;
-  color: var(--success);
+  background: transparent;
+  color: var(--charcoal);
+  font-weight: 400;
+  opacity: 0.7;
 }
 
 .product-stock.out-of-stock {
@@ -421,12 +423,13 @@ select {
 }
 
 .btn-primary {
-  background: var(--gradient-gold);
+  background: transparent;
   color: var(--noir);
+  border: 2px solid var(--gold);
   box-shadow: var(--shadow-md);
 }
 
-/* Shimmer effect */
+/* Subtle shimmer effect on hover */
 .btn-primary::before {
   content: '';
   position: absolute;
@@ -434,7 +437,7 @@ select {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.1), transparent);
   transition: left 0.5s ease;
 }
 
@@ -443,8 +446,10 @@ select {
 }
 
 .btn-primary:hover:not(:disabled) {
+  background: rgba(212, 175, 55, 0.05);
   box-shadow: var(--shadow-gold);
   transform: translateY(-2px);
+  border-color: var(--gold);
 }
 
 .btn-primary:active:not(:disabled) {
@@ -452,10 +457,12 @@ select {
 }
 
 .btn-primary:disabled {
-  background: var(--mist);
+  background: transparent;
+  border-color: var(--mist);
   color: #94a3b8;
   cursor: not-allowed;
   box-shadow: none;
+  opacity: 0.5;
 }
 
 /* ========================================
@@ -654,6 +661,67 @@ select {
   background-clip: text;
   padding-top: var(--space-4);
   border-top: 2px solid var(--gold);
+}
+
+.envio-tachado {
+  text-decoration: line-through;
+  color: #94a3b8;
+  margin-right: var(--space-2);
+}
+
+.envio-gratis {
+  color: var(--success);
+  font-weight: 600;
+}
+
+/* Delivery Options */
+.delivery-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.delivery-option {
+  display: flex;
+  align-items: center;
+  padding: var(--space-4);
+  border: 2px solid var(--mist);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: white;
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+.delivery-option:hover {
+  border-color: var(--gold);
+  background: rgba(212, 175, 55, 0.05);
+}
+
+.delivery-option input[type="radio"] {
+  margin-right: var(--space-3);
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--gold);
+}
+
+.delivery-option input[type="radio"]:checked + span {
+  font-weight: 600;
+  color: var(--noir);
+}
+
+.delivery-option:has(input[type="radio"]:checked) {
+  border-color: var(--gold);
+  background: rgba(212, 175, 55, 0.1);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1);
+}
+
+.delivery-option span {
+  flex: 1;
+  font-size: var(--text-base);
 }
 
 /* Form Groups */
